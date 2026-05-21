@@ -1,0 +1,83 @@
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\API\ChannelController;
+use App\Http\Controllers\API\StreamController;
+use App\Http\Controllers\API\IcecastController;
+use App\Http\Controllers\API\RelayBroadcastController;
+
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register API routes for your application. These
+| routes are loaded by the RouteServiceProvider and all of them will
+| be assigned to the "api" middleware group. Make something great!
+|
+*/
+
+Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+    return $request->user();
+});
+
+// Channel Management Routes
+Route::prefix('channels')->group(function () {
+    Route::get('/', [ChannelController::class, 'index']);
+    Route::post('/', [ChannelController::class, 'store']);
+    Route::get('/{channel}', [ChannelController::class, 'show']);
+    Route::put('/{channel}', [ChannelController::class, 'update']);
+    Route::delete('/{channel}', [ChannelController::class, 'destroy']);
+    Route::get('/{channel}/status', [ChannelController::class, 'status']);
+    Route::get('/{channel}/events', [ChannelController::class, 'events']);
+});
+
+// Stream Management Routes
+Route::prefix('streams')->group(function () {
+    Route::post('/start', [StreamController::class, 'start']);
+    Route::post('/stop', [StreamController::class, 'stop']);
+    Route::get('/{channel}/status', [StreamController::class, 'status']);
+    Route::post('/{channel}/fallback', [StreamController::class, 'fallback']);
+    Route::get('/{channel}/statistics', [StreamController::class, 'statistics']);
+    Route::get('/{channel}/recent', [StreamController::class, 'recent']);
+});
+
+// Icecast Streaming Routes
+Route::prefix('icecast')->group(function () {
+    Route::post('/{channel}/create', [IcecastController::class, 'create']);
+    Route::get('/{channel}/stream-url', [IcecastController::class, 'getStreamUrl']);
+    Route::get('/{channel}/stats', [IcecastController::class, 'getStats']);
+    Route::post('/{channel}/disconnect', [IcecastController::class, 'disconnect']);
+    Route::post('/{channel}/max-listeners', [IcecastController::class, 'setMaxListeners']);
+    Route::post('/{channel}/enable', [IcecastController::class, 'enable']);
+    Route::post('/{channel}/disable', [IcecastController::class, 'disable']);
+});
+
+// Relay Broadcast Routes
+Route::prefix('relay')->group(function () {
+    // Relay Server Management
+    Route::get('/servers', [RelayBroadcastController::class, 'getServers']);
+    Route::post('/servers', [RelayBroadcastController::class, 'addServer']);
+
+    // Relay Control
+    Route::post('/{channel}/start', [RelayBroadcastController::class, 'start']);
+    Route::post('/{relay}/stop', [RelayBroadcastController::class, 'stop']);
+    Route::get('/{relay}/status', [RelayBroadcastController::class, 'status']);
+
+    // Relay Information
+    Route::get('/{channel}/broadcasts', [RelayBroadcastController::class, 'getChannelRelays']);
+    Route::get('/{relay}/logs', [RelayBroadcastController::class, 'getLogs']);
+
+    // Relay Feature Toggle
+    Route::post('/{channel}/enable', [RelayBroadcastController::class, 'enableRelay']);
+    Route::post('/{channel}/disable', [RelayBroadcastController::class, 'disableRelay']);
+});
+
+// Health Check
+Route::get('/health', function () {
+    return response()->json([
+        'status' => 'ok',
+        'timestamp' => now(),
+    ]);
+});

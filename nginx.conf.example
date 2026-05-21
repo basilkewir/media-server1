@@ -1,0 +1,92 @@
+# /etc/nginx/nginx.conf
+# MediaServer - Nginx configuration with RTMP module
+# Install: sudo apt-get install nginx libnginx-mod-rtmp
+
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+include /etc/nginx/modules-enabled/*.conf;
+
+events {
+    worker_connections 1024;
+    multi_accept on;
+}
+
+# ── RTMP (live push ingest) ───────────────────────────────────────────────────
+rtmp {
+    server {
+        listen 1935;
+        chunk_size 4096;
+        max_connections 1000;
+
+        application live {
+            live on;
+            record off;
+
+            # Notify MediaServer API when a stream starts/stops
+            # MediaServer will start FFmpeg → HLS output and monitor health
+            on_publish      http://127.0.0.1/api/streams/start;
+            on_publish_done http://127.0.0.1/api/streams/stop;
+
+            # Allow push from anywhere (restrict in production)
+            allow publish all;
+            allow play all;
+        }
+    }
+}
+
+# ── HTTP ──────────────────────────────────────────────────────────────────────
+http {
+    sendfile on;
+    tcp_nopush on;
+    types_hash_max_size 2048;
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    gzip on;
+    gzip_types text/plain application/json application/javascript text/css;
+
+    server {
+        listen 80 default_server;
+        server_name _;
+        root /var/www/media-server/public;
+        index index.php;
+
+        # CORS for HLS/DASH players
+        add_header Access-Control-Allow-Origin  "*" always;
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
+
+        if ($request_method = OPTIONS) {
+            return 204;
+        }
+
+        location / {
+            try_files $uri $uri/ /index.php?$query_string;
+        }
+
+        location ~ \.php$ {
+            fastcgi_pass   unix:/var/run/php/php8.2-fpm.sock;
+            fastcgi_index  index.php;
+            fastcgi_param  SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+            include        fastcgi_params;
+            fastcgi_read_timeout 300;
+        }
+
+        # Serve HLS/DASH segments directly from storage (bypass PHP)
+        location /streams/ {
+            alias /var/www/media-server/storage/streams/;
+            expires -1;
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+            add_header Access-Control-Allow-Origin "*";
+
+            types {
+                application/vnd.apple.mpegurl  m3u8;
+                video/MP2T                     ts;
+                application/dash+xml           mpd;
+            }
+        }
+
+        location ~ /\.ht { deny all; }
+    }
+}

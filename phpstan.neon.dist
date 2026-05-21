@@ -1,0 +1,14 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app
+        - routes
+        - database
+
+    level: 5
+
+    ignoreErrors:
+        - '#Call to an undefined method Illuminate\\Contracts\\Auth\\Factory::user()#'
+        - '#Access to an undefined property App\\Models\\#'

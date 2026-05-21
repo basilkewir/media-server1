@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # PHP-FPM Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: media-server-app
+    working_dir: /var/www/media-server
+    restart: unless-stopped
+    environment:
+      - LARAVEL_ENV=production
+      - DB_CONNECTION=mysql
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_DATABASE=media_server
+      - DB_USERNAME=media_user
+      - DB_PASSWORD=laravel
+      - REDIS_HOST=redis
+      - QUEUE_CONNECTION=redis
+      - ICECAST_HOST=icecast
+      - ICECAST_ADMIN_USER=admin
+      - ICECAST_ADMIN_PASSWORD=hackme
+      - ICECAST_SOURCE_PASSWORD=hackme
+      - ICECAST_RELAY_PASSWORD=hackme
+    volumes:
+      - ./storage:/var/www/media-server/storage
+      - ./bootstrap/cache:/var/www/media-server/bootstrap/cache
+    ports:
+      - "80:80"
+      - "443:443"
+      - "1935:1935"
+    networks:
+      - media-server-network
+    depends_on:
+      - db
+      - redis
+      - icecast
+
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    container_name: media-server-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: media_server
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_PASSWORD: laravel
+      MYSQL_USER: media_user
+      MYSQL_ALLOW_EMPTY_PASSWORD: 1
+    volumes:
+      - db-volume:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - media-server-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # Icecast2 Streaming + Web Admin Interface (port 8000)
+  icecast:
+    image: moul/icecast:latest
+    container_name: media-server-icecast
+    restart: unless-stopped
+    environment:
+      - ICECAST_SOURCE_PASSWORD=hackme
+      - ICECAST_RELAY_PASSWORD=hackme
+      - ICECAST_ADMIN_USER=admin
+      - ICECAST_ADMIN_PASSWORD=hackme
+      - ICECAST_HOSTNAME=localhost
+      - ICECAST_MAX_CLIENTS=1000
+      - ICECAST_MAX_SOURCES=100
+    volumes:
+      - icecast-log-volume:/var/log/icecast2
+      - icecast-mounts-volume:/etc/icecast2/mounts
+    ports:
+      - "8000:8000"
+    networks:
+      - media-server-network
+
+  # Redis Cache and Queue
+  redis:
+    image: redis:7-alpine
+    container_name: media-server-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-volume:/data
+    networks:
+      - media-server-network
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+volumes:
+  db-volume:
+  redis-volume:
+  icecast-log-volume:
+  icecast-mounts-volume:
+
+networks:
+  media-server-network:
+    driver: bridge

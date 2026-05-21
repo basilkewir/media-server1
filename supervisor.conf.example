@@ -1,0 +1,83 @@
+[supervisord]
+logfile=/var/log/supervisor/supervisord.log
+pidfile=/var/run/supervisord.pid
+nodaemon=false
+user=root
+
+[unix_http_server]
+file=/var/run/supervisor.sock
+chmod=0700
+
+[supervisorctl]
+serverurl=unix:///var/run/supervisor.sock
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+; ── Stream Health Monitor (VOD fallback trigger) ──────────────────────────────
+[program:mediaserver-monitor]
+process_name=%(program_name)s
+command=/usr/bin/php /var/www/media-server/artisan stream:monitor --interval=5
+directory=/var/www/media-server
+user=www-data
+autostart=true
+autorestart=true
+numprocs=1
+startsecs=3
+startretries=10
+redirect_stderr=true
+stdout_logfile=/var/log/supervisor/mediaserver-monitor.log
+stdout_logfile_maxbytes=50MB
+stdout_logfile_backups=5
+environment=HOME="/var/www",USER="www-data"
+
+; ── Queue Workers ─────────────────────────────────────────────────────────────
+[program:mediaserver-queue]
+process_name=%(program_name)s_%(process_num)02d
+command=/usr/bin/php /var/www/media-server/artisan queue:work redis --sleep=3 --tries=3 --timeout=120 --max-time=3600
+directory=/var/www/media-server
+user=www-data
+autostart=true
+autorestart=true
+numprocs=2
+startsecs=3
+redirect_stderr=true
+stdout_logfile=/var/log/supervisor/mediaserver-queue.log
+stdout_logfile_maxbytes=50MB
+stdout_logfile_backups=5
+environment=HOME="/var/www",USER="www-data"
+
+; ── Relay Health Monitor ──────────────────────────────────────────────────────
+[program:mediaserver-relay-monitor]
+process_name=%(program_name)s
+command=/usr/bin/php /var/www/media-server/artisan relay:health-check --interval=30
+directory=/var/www/media-server
+user=www-data
+autostart=true
+autorestart=true
+numprocs=1
+startsecs=3
+startretries=10
+redirect_stderr=true
+stdout_logfile=/var/log/supervisor/mediaserver-relay.log
+stdout_logfile_maxbytes=50MB
+stdout_logfile_backups=5
+environment=HOME="/var/www",USER="www-data"
+
+; ── Laravel Scheduler ─────────────────────────────────────────────────────────
+[program:mediaserver-scheduler]
+process_name=%(program_name)s
+command=/usr/bin/php /var/www/media-server/artisan schedule:work
+directory=/var/www/media-server
+user=www-data
+autostart=true
+autorestart=true
+numprocs=1
+redirect_stderr=true
+stdout_logfile=/var/log/supervisor/mediaserver-scheduler.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=3
+environment=HOME="/var/www",USER="www-data"
+
+[group:mediaserver]
+programs=mediaserver-monitor,mediaserver-queue,mediaserver-relay-monitor,mediaserver-scheduler
