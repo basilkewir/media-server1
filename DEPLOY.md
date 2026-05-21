@@ -9,7 +9,7 @@ Run these commands **on your local machine** (in the `media-server` folder):
 #    https://github.com/new  (name it: mediaserver)
 
 # 2. Add your GitHub repo as remote and push
-git remote add origin https://github.com/YOUR_USERNAME/mediaserver.git
+git remote add origin https://github.com/basilkewir/media-server1.git
 git branch -M main
 git push -u origin main
 ```
@@ -23,7 +23,7 @@ SSH into your Ubuntu VPS and run:
 # ssh root@5.180.182.232
 
 # Download and run the installer
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/mediaserver/main/deploy-remote.sh -o deploy-remote.sh
+curl -fsSL https://github.com/basilkewir/media-server1.git/ deploy-remote.sh -o deploy-remote.sh
 bash deploy-remote.sh
 ```
 
@@ -35,7 +35,7 @@ apt update && apt install -y git nginx mysql-server redis-server ffmpeg php8.3-f
 
 # 2. Clone your repo
 cd /var/www
-git clone https://github.com/YOUR_USERNAME/mediaserver.git mediaserver
+git clone https://github.com/basilkewir/media-server1.git mediaserver
 cd mediaserver
 
 # 3. Install PHP dependencies

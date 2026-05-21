@@ -4,7 +4,7 @@ set -euo pipefail
 # MediaServer Remote VPS Deployment Script
 # Run this on your Ubuntu VPS after cloning from GitHub
 
-REPO_URL="${REPO_URL:-https://github.com/YOUR_USERNAME/mediaserver.git}"
+REPO_URL="${REPO_URL:-https://github.com/basilkewir/media-server1.git}"
 DOMAIN="${DOMAIN:-5.180.182.232}"
 MYSQL_PASS="${MYSQL_PASS:-$(openssl rand -base64 32 | tr -d '=+/')}"
 APP_KEY="${APP_KEY:-$(openssl rand -base64 32)}"
