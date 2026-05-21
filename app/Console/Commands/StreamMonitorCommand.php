@@ -3,6 +3,8 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Services\StreamHealthMonitor;
 use App\Services\OutputManager;
 
@@ -23,17 +25,29 @@ class StreamMonitorCommand extends Command
         $interval = max(1, (int) $this->option('interval'));
         $this->info("Stream + output monitor started (interval: {$interval}s)");
 
+        // Wait for DB and required tables before starting
+        $attempts = 0;
+        while ($attempts < 30) {
+            try {
+                DB::connection()->getPdo();
+                if (Schema::hasTable('channels') && Schema::hasTable('streams')) {
+                    break;
+                }
+                $this->warn('Waiting for migrations...');
+            } catch (\Exception $e) {
+                $this->warn("DB not ready: {$e->getMessage()}");
+            }
+            sleep(5);
+            $attempts++;
+        }
+
         while (true) {
             try {
-                // 1. Check ingest stream health / VOD fallback
                 $this->monitor->checkAllChannels();
-
-                // 2. Check all output target processes, reconnect dead ones
                 $this->outputManager->checkAllTargets();
             } catch (\Exception $e) {
                 $this->error('Monitor error: ' . $e->getMessage());
             }
-
             sleep($interval);
         }
 

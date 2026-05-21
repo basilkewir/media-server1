@@ -5,7 +5,9 @@ namespace App\Console\Commands;
 use App\Models\RelayBroadcast;
 use App\Services\RelayBroadcastService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class RelayHealthCheckCommand extends Command
 {
@@ -22,17 +24,44 @@ class RelayHealthCheckCommand extends Command
         $interval = max(5, (int) $this->option('interval'));
         $this->info("Relay health monitor started (interval: {$interval}s)");
 
+        // Wait for DB to be ready before first check
+        $this->waitForDatabase();
+
         while (true) {
             try {
                 $this->runChecks();
             } catch (\Exception $e) {
                 Log::error('Relay health check error: ' . $e->getMessage());
                 $this->error($e->getMessage());
+                // Back off on repeated errors instead of tight-looping
+                sleep(min($interval * 2, 60));
+                continue;
             }
             sleep($interval);
         }
 
         return 0;
+    }
+
+    protected function waitForDatabase(): void
+    {
+        $attempts = 0;
+        while ($attempts < 30) {
+            try {
+                \Illuminate\Support\Facades\DB::connection()->getPdo();
+                // Also verify the relay_broadcasts table exists
+                if (\Illuminate\Support\Facades\Schema::hasTable('relay_broadcasts')) {
+                    return;
+                }
+                $this->warn('relay_broadcasts table not found — waiting for migrations...');
+            } catch (\Exception $e) {
+                $this->warn("DB not ready ({$e->getMessage()}) — retrying in 5s...");
+            }
+            sleep(5);
+            $attempts++;
+        }
+        $this->error('Database not available after 150s — exiting.');
+        exit(1);
     }
 
     protected function runChecks(): void
