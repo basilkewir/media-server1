@@ -48,7 +48,7 @@ def main():
     
     srt_listen = f'srt://:{SRT_LISTEN_PORT}?mode=listener&latency=1000'
     udp_relay = f'udp://127.0.0.1:{UDP_RELAY_PORT}'
-    rtmp_output = f'rtmp://{RTMP_RELAY_HOST}:{RTMP_RELAY_PORT}/live/{STREAM_ID}'
+    rtmp_output = f'rtmp://{RTMP_RELAY_HOST}:{RTMP_RELAY_PORT}/{STREAM_ID}'
     
     logger.info('='*70)
     logger.info('SRT Server Starting (Two-Stage Relay)')
