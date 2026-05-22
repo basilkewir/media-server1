@@ -102,9 +102,14 @@ class SrtStreamController extends Controller
      */
     public function edit(SrtStream $srtStream)
     {
-        // Dedicated edit view isn't present yet; keep UI functional.
-        return redirect()->route('admin.srt-streams.index')
-            ->with('error', 'Edit form view is not available yet.');
+        return view('admin.srt-streams.edit', [
+            'stream' => $srtStream,
+            'codecs' => [
+                'video' => ['h264', 'h265', 'vp9'],
+                'audio' => ['aac', 'mp3', 'flac'],
+            ],
+            'resolutions' => ['720p', '1080p', '2K', '4K'],
+        ]);
     }
 
     /**
