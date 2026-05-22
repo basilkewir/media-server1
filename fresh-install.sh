@@ -99,11 +99,29 @@ cp .env.example .env
 # Generate APP_KEY
 php artisan key:generate --force
 
+# Configure database - detect MySQL socket and auth method
+echo -e "${BLUE}  Detecting MySQL configuration...${NC}"
+
+# Check if MySQL socket exists
+if [ -S /var/run/mysqld/mysqld.sock ]; then
+    DB_SOCKET="/var/run/mysqld/mysqld.sock"
+else
+    DB_SOCKET="/tmp/mysql.sock"
+fi
+
+# Try to connect to MySQL (it should allow root without password via socket)
+mysql -u root << SQL_EOF 2>/dev/null || true
+CREATE DATABASE IF NOT EXISTS media_server;
+CREATE USER IF NOT EXISTS 'mediaserver'@'localhost' IDENTIFIED BY 'media_server_pass';
+GRANT ALL PRIVILEGES ON media_server.* TO 'mediaserver'@'localhost';
+FLUSH PRIVILEGES;
+SQL_EOF
+
 # Configure database
 sed -i "s/DB_HOST=.*/DB_HOST=127.0.0.1/" .env
 sed -i "s/DB_DATABASE=.*/DB_DATABASE=media_server/" .env
-sed -i "s/DB_USERNAME=.*/DB_USERNAME=root/" .env
-sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=/" .env
+sed -i "s/DB_USERNAME=.*/DB_USERNAME=mediaserver/" .env
+sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=media_server_pass/" .env
 
 # Configure Laravel port
 sed -i "s/APP_URL=.*/APP_URL=http:\/\/localhost:${LARAVEL_PORT}/" .env
