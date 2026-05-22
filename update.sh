@@ -33,46 +33,81 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # ── 2. CHECK APP DIRECTORY ───────────────────────────────────────────────────
-if [ ! -d "${APP_DIR}/.git" ]; then
-    error "App directory ${APP_DIR} is not a git repository. Run deploy-to-ubuntu.sh first."
+if [ -d "${APP_DIR}" ] && [ ! -d "${APP_DIR}/.git" ]; then
+    error "App directory ${APP_DIR} exists but is not a git repository. Please remove it manually or set a different APP_DIR."
+fi
+
+# ── 3. BACKUP CRITICAL FILES ─────────────────────────────────────────────────
+BACKUP_DIR="/tmp/mediaserver-backup-$(date +%Y%m%d_%H%M%S)"
+mkdir -p "${BACKUP_DIR}"
+
+if [ -d "${APP_DIR}" ]; then
+    info "Backing up critical files before deletion..."
+
+    # Backup .env
+    if [ -f "${APP_DIR}/.env" ]; then
+        cp "${APP_DIR}/.env" "${BACKUP_DIR}/.env"
+        info "  → .env backed up"
+    fi
+
+    # Backup storage directory (logs, HLS segments, uploads)
+    if [ -d "${APP_DIR}/storage" ]; then
+        cp -a "${APP_DIR}/storage" "${BACKUP_DIR}/storage"
+        info "  → storage/ backed up"
+    fi
+
+    # Backup any custom nginx config if present in the app dir
+    if [ -f "${APP_DIR}/nginx.conf" ]; then
+        cp "${APP_DIR}/nginx.conf" "${BACKUP_DIR}/nginx.conf"
+        info "  → nginx.conf backed up"
+    fi
+fi
+
+# ── 4. DELETE EXISTING FOLDER AND CLONE FRESH ────────────────────────────────
+if [ -d "${APP_DIR}" ]; then
+    info "Deleting existing app directory: ${APP_DIR}"
+    rm -rf "${APP_DIR}"
+fi
+
+info "Cloning fresh copy from ${REPO_URL}..."
+if [[ "${REPO_URL}" == git@github.com:* ]]; then
+    if [ -f "${DEPLOY_KEY}" ]; then
+        GIT_SSH_COMMAND="ssh -i ${DEPLOY_KEY} -o IdentitiesOnly=yes" git clone "${REPO_URL}" "${APP_DIR}"
+    else
+        git clone "${REPO_URL}" "${APP_DIR}"
+    fi
+else
+    git clone "${REPO_URL}" "${APP_DIR}"
 fi
 
 cd "${APP_DIR}"
 
-# ── 3. BACKUP .ENV (just in case) ────────────────────────────────────────────
-if [ -f ".env" ]; then
-    info "Backing up .env..."
-    cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
+# ── 6. RESTORE BACKED-UP FILES ───────────────────────────────────────────────
+if [ -f "${BACKUP_DIR}/.env" ]; then
+    info "Restoring .env..."
+    cp "${BACKUP_DIR}/.env" "${APP_DIR}/.env"
 fi
 
-# ── 4. PULL LATEST CODE ──────────────────────────────────────────────────────
-info "Pulling latest code from ${REPO_URL}..."
-
-# Stash any local changes (shouldn't be any, but safety first)
-git stash push -m "update-script-auto-stash-$(date +%Y%m%d_%H%M%S)" || true
-
-if [[ "${REPO_URL}" == git@github.com:* ]]; then
-    if [ -f "${DEPLOY_KEY}" ]; then
-        GIT_SSH_COMMAND="ssh -i ${DEPLOY_KEY} -o IdentitiesOnly=yes" git pull origin $(git rev-parse --abbrev-ref HEAD)
-    else
-        git pull origin $(git rev-parse --abbrev-ref HEAD)
-    fi
-else
-    git pull origin $(git rev-parse --abbrev-ref HEAD)
+if [ -d "${BACKUP_DIR}/storage" ]; then
+    info "Restoring storage/..."
+    rm -rf "${APP_DIR}/storage"
+    cp -a "${BACKUP_DIR}/storage" "${APP_DIR}/storage"
 fi
 
-# Restore stashed changes if any (unlikely in production)
-git stash pop 2>/dev/null || true
+if [ -f "${BACKUP_DIR}/nginx.conf" ]; then
+    info "Restoring nginx.conf..."
+    cp "${BACKUP_DIR}/nginx.conf" "${APP_DIR}/nginx.conf"
+fi
 
-# ── 5. INSTALL PHP DEPENDENCIES ──────────────────────────────────────────────
+# ── 7. INSTALL PHP DEPENDENCIES ──────────────────────────────────────────────
 info "Installing PHP dependencies..."
 composer install --no-dev --optimize-autoloader --no-interaction
 
-# ── 6. RUN MIGRATIONS ────────────────────────────────────────────────────────
+# ── 8. RUN MIGRATIONS ────────────────────────────────────────────────────────
 info "Running database migrations..."
 php artisan migrate --force
 
-# ── 7. CLEAR AND REBUILD CACHES ──────────────────────────────────────────────
+# ── 9. CLEAR AND REBUILD CACHES ──────────────────────────────────────────────
 info "Clearing caches..."
 php artisan cache:clear --no-interaction
 php artisan config:clear --no-interaction
@@ -84,20 +119,20 @@ php artisan config:cache --no-interaction
 php artisan route:cache --no-interaction
 php artisan view:cache --no-interaction
 
-# ── 8. FIX PERMISSIONS ───────────────────────────────────────────────────────
+# ── 10. FIX PERMISSIONS ──────────────────────────────────────────────────────
 info "Setting permissions..."
 chown -R www-data:www-data "${APP_DIR}"
 chmod -R 755 "${APP_DIR}"
 chmod -R 775 "${APP_DIR}/storage"
 chmod -R 775 "${APP_DIR}/bootstrap/cache"
 
-# ── 9. RESTART WORKERS ───────────────────────────────────────────────────────
+# ── 11. RESTART WORKERS ──────────────────────────────────────────────────────
 info "Restarting supervisor workers..."
 supervisorctl reread || true
 supervisorctl update || true
 supervisorctl restart all || true
 
-# ── 10. HEALTH CHECK ─────────────────────────────────────────────────────────
+# ── 12. HEALTH CHECK ─────────────────────────────────────────────────────────
 info "Running health check..."
 sleep 2
 HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/health || echo "000")
