@@ -9,10 +9,8 @@ use Illuminate\Support\Facades\Log;
 
 class SrtStreamController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware('auth');
-    }
+    // Auth is enforced at the route group level (routes/web.php).
+    // Avoid doing middleware wiring in the constructor.
 
     /**
      * Display list of SRT streams
