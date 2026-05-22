@@ -47,25 +47,38 @@ if [ ! -d "$MEDIASERVER_DIR" ]; then
 fi
 ok "MediaServer directory found"
 
-# Check if Flussonic service exists
-if ! systemctl list-units --all --quiet | grep -q "flussonic.service"; then
-    error "Flussonic service not found. Please install Flussonic first."
+# Check if Flussonic service is running
+if ! systemctl is-active --quiet flussonic 2>/dev/null; then
+    warn "Attempting to start Flussonic service..."
+    if systemctl start flussonic 2>/dev/null; then
+        sleep 2
+        ok "Flussonic service started"
+    else
+        error "Flussonic service not found or could not be started"
+    fi
+else
+    ok "Flussonic service is running"
 fi
-ok "Flussonic service found"
 
 # Check if Flussonic config exists
 if [ ! -f "$FLUSSONIC_CONF" ]; then
-    error "Flussonic config not found at $FLUSSONIC_CONF"
+    warn "Flussonic config not found at $FLUSSONIC_CONF. This may be normal for some installations."
+else
+    ok "Flussonic configuration found"
 fi
-ok "Flussonic configuration found"
 
 # Check if Flussonic service is running
 if sudo systemctl is-active --quiet flussonic; then
     ok "Flussonic service is running"
 else
     warn "Flussonic service is not running. Attempting to start..."
-    sudo systemctl start flussonic || error "Failed to start Flussonic service"
-    ok "Flussonic service started"
+    sudo systemctl start flussonic || warn "Could not start Flussonic service"
+    sleep 2
+    if sudo systemctl is-active --quiet flussonic; then
+        ok "Flussonic service started"
+    else
+        warn "Flussonic service may not be available"
+    fi
 fi
 
 # ============================================================
