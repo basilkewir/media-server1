@@ -97,6 +97,12 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::put('srt-streams/{srtStream}',                   [SrtStreamController::class, 'update'])->name('srt-streams.update');
     Route::patch('srt-streams/{srtStream}/toggle',          [SrtStreamController::class, 'toggle'])->name('srt-streams.toggle');
     Route::delete('srt-streams/{srtStream}',                [SrtStreamController::class, 'destroy'])->name('srt-streams.destroy');
+    
+    // SRT Dashboard & Management
+    Route::get('srt-streams/api/list',                      [\App\Http\Controllers\Admin\SrtDashboardController::class, 'widget'])->name('srt-streams.list');
+    Route::get('srt-streams/api/{id}/details',              [\App\Http\Controllers\Admin\SrtDashboardController::class, 'streamDetails'])->name('srt-streams.details');
+    Route::get('srt-streams/api/{id}/logs',                 [\App\Http\Controllers\Admin\SrtDashboardController::class, 'logs'])->name('srt-streams.logs');
+    Route::get('srt-streams/api/status',                    [\App\Http\Controllers\Admin\SrtDashboardController::class, 'status'])->name('srt-streams.status');
 
     // Access Codes
     Route::get('access-codes/create',                       [AccessCodeController::class, 'create'])->name('access-codes.create');
