@@ -113,9 +113,11 @@
             letter-spacing: 0.05em;
             color: var(--text);
         }
-        .nav { display: flex; gap: 1rem; margin-bottom: 2rem; }
+        .nav { display: flex; gap: 1rem; margin-bottom: 2rem; align-items: center; flex-wrap: wrap; }
         .nav a { color: var(--text-muted); text-decoration: none; font-weight: 500; }
         .nav a:hover, .nav a.active { color: var(--primary); }
+        .nav-user { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; font-size: 0.875rem; }
+        .nav-user form { display: inline; }
         table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
         th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
         th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
@@ -129,13 +131,27 @@
         .badge-library_only { background: #dbeafe; color: #1e40af; }
         .badge-full_access { background: #dcfce7; color: #166534; }
         .badge-premium { background: #fef3c7; color: #92400e; }
+        .badge-live { background: #dcfce7; color: #166534; }
+        .badge-vod { background: #fef3c7; color: #92400e; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="nav">
+            <a href="{{ route('admin.channels.index') }}" class="{{ request()->routeIs('admin.channels.*') ? 'active' : '' }}">Channels</a>
+            @if(auth()->user()?->isAdmin())
+            <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}">Users</a>
+            @endif
             <a href="{{ route('admin.access-codes.create') }}" class="{{ request()->routeIs('admin.access-codes.create') ? 'active' : '' }}">Generate Codes</a>
             <a href="{{ route('admin.access-codes.index') }}" class="{{ request()->routeIs('admin.access-codes.index') ? 'active' : '' }}">View Codes</a>
+
+            <div class="nav-user">
+                <span style="color: var(--text-muted);">{{ auth()->user()->name }} <small>({{ auth()->user()->role }})</small></span>
+                <form method="POST" action="{{ route('logout') }}">
+                    @csrf
+                    <button type="submit" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:0.875rem;font-weight:500;">Logout</button>
+                </form>
+            </div>
         </div>
 
         @if(session('success'))

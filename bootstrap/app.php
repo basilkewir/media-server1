@@ -27,6 +27,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth.api' => \App\Http\Middleware\AuthenticateApi::class,
             'throttle.api' => \App\Http\Middleware\RateLimitApi::class,
             'access_code' => \App\Http\Middleware\RequireAccessCode::class,
+            'auth' => \Illuminate\Auth\Middleware\Authenticate::class,
+            'guest' => \Illuminate\Auth\Middleware\RedirectIfAuthenticated::class,
+            'admin' => \App\Http\Middleware\AdminOnly::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

@@ -49,6 +49,11 @@ class Channel extends Model
         return $this->hasMany(OutputTarget::class);
     }
 
+    public function managers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'channel_user');
+    }
+
     public function activeStream(): ?Stream
     {
         return $this->streams()
