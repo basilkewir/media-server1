@@ -165,12 +165,26 @@ class SrtDashboardController extends Controller
             foreach ($streams as $stream) {
                 $isListening = $this->checkPortListening($stream->srt_port);
 
-                // Parse latest bitrate from logs if present.
+                // Parse latest bitrate(s) from logs if present.
                 $bitrateKbps = null;
+                $videoKbps = null;
+                $audioKbps = null;
                 if ($logText !== '') {
                     $pattern = "/\\[FFmpeg-" . preg_quote($stream->stream_id, '/') . "\\].*?bitrate=(\\d+(?:\\.\\d+)?)kbits\\/s/is";
                     if (preg_match_all($pattern, $logText, $m) && !empty($m[1])) {
                         $bitrateKbps = (int) round((float) end($m[1]));
+                    }
+
+                    // Optional: some FFmpeg outputs include separate video/audio bitrate info.
+                    // Patterns we try (best-effort): "video:(...)kbits/s" and "audio:(...)kbits/s".
+                    $vPattern = "/\\[FFmpeg-" . preg_quote($stream->stream_id, '/') . "\\].*?video:\s*(\\d+(?:\\.\\d+)?)kbits\\/s/is";
+                    if (preg_match_all($vPattern, $logText, $vm) && !empty($vm[1])) {
+                        $videoKbps = (int) round((float) end($vm[1]));
+                    }
+
+                    $aPattern = "/\\[FFmpeg-" . preg_quote($stream->stream_id, '/') . "\\].*?audio:\s*(\\d+(?:\\.\\d+)?)kbits\\/s/is";
+                    if (preg_match_all($aPattern, $logText, $am) && !empty($am[1])) {
+                        $audioKbps = (int) round((float) end($am[1]));
                     }
                 }
 
@@ -191,6 +205,24 @@ class SrtDashboardController extends Controller
                 if ($bitrateKbps !== null && $bitrateKbps > 0 && (int) $stream->bitrate !== $bitrateKbps) {
                     $stream->bitrate = $bitrateKbps;
                     $dirty = true;
+                }
+
+                // If we managed to parse video/audio bitrate, expose it via error_log as a lightweight
+                // field the UI can display without schema changes.
+                if ($videoKbps !== null || $audioKbps !== null) {
+                    $parts = [];
+                    if ($videoKbps !== null) {
+                        $parts[] = "video={$videoKbps}kbps";
+                    }
+                    if ($audioKbps !== null) {
+                        $parts[] = "audio={$audioKbps}kbps";
+                    }
+                    $note = 'bitrate_parts:' . implode(',', $parts);
+
+                    if ($stream->error_log !== $note) {
+                        $stream->error_log = $note;
+                        $dirty = true;
+                    }
                 }
 
                 if ($dirty) {

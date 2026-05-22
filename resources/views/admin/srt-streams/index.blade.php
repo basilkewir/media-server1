@@ -216,6 +216,16 @@
                     const statusBadge = `<span class="status-badge status-${stream.status}">${stream.status.toUpperCase()}</span>`;
                     const enabledBadge = stream.enabled ? '✅' : '⏸️';
 
+                    // Optional extra bitrate info (video/audio) is stored as a lightweight tag in error_log
+                    // e.g. "bitrate_parts:video=1200kbps,audio=128kbps".
+                    let bitrateParts = '';
+                    if (typeof stream.error_log === 'string' && stream.error_log.startsWith('bitrate_parts:')) {
+                        bitrateParts = stream.error_log.replace('bitrate_parts:', '');
+                    }
+                    const bitrateCell = bitrateParts
+                        ? `${stream.bitrate} kbps<br><small class="text-muted">${bitrateParts}</small>`
+                        : `${stream.bitrate} kbps`;
+
                     tbody.innerHTML += `
                         <tr>
                             <td>
@@ -230,7 +240,7 @@
                                 <code>${stream.rtmp_stream}</code>
                             </td>
                             <td>${statusBadge}</td>
-                            <td>${stream.bitrate} kbps</td>
+                            <td>${bitrateCell}</td>
                             <td>
                                 <small>${stream.last_connected_at || 'Never'}</small>
                             </td>
@@ -241,7 +251,7 @@
                                 <button class="btn btn-sm btn-secondary btn-action" onclick="showStreamLogs(${stream.id})" title="View Logs">
                                     <i class="fas fa-list"></i>
                                 </button>
-                                <a href="{{ route('admin.srt-streams.edit', '') }}/${stream.id}" class="btn btn-sm btn-warning btn-action" title="Edit">
+                                <a href="{{ rtrim(route('admin.srt-streams.index'), '/') }}/${stream.id}/edit" class="btn btn-sm btn-warning btn-action" title="Edit">
                                     <i class="fas fa-edit"></i>
                                 </a>
                                 <button class="btn btn-sm btn-danger btn-action" onclick="deleteStream(${stream.id})" title="Delete">
