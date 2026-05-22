@@ -24,7 +24,7 @@ class StreamHealthMonitor
             $stream = $channel->activeStream();
 
             if (!$stream) {
-                if ($channel->vod_playlist_url && $channel->is_active) {
+                if (config('services.stream.vod_fallback_enabled', true) && $channel->vod_playlist_url && $channel->is_active) {
                     $this->triggerVODFallback($channel);
                 }
                 return false;
@@ -32,9 +32,14 @@ class StreamHealthMonitor
 
             // On VOD fallback — just keep FFmpeg alive
             if ($stream->status === 'fallback') {
-                if (!$this->streaming()->isFFmpegRunning($channel)) {
-                    Log::warning('VOD fallback FFmpeg died, restarting', ['channel' => $channel->slug]);
-                    $this->streaming()->switchToVODFallback($channel);
+                if (config('services.stream.vod_fallback_enabled', true)) {
+                    if (!$this->streaming()->isFFmpegRunning($channel)) {
+                        Log::warning('VOD fallback FFmpeg died, restarting', ['channel' => $channel->slug]);
+                        $this->streaming()->switchToVODFallback($channel);
+                    }
+                } else {
+                    // If VOD fallback is disabled, stop the stream
+                    $this->streaming()->stopStream($channel);
                 }
                 return true;
             }
@@ -50,7 +55,7 @@ class StreamHealthMonitor
                     'source'   => $stream->source_url,
                 ]);
 
-                if ($channel->vod_playlist_url) {
+                if (config('services.stream.vod_fallback_enabled', true) && $channel->vod_playlist_url) {
                     $this->triggerVODFallback($channel);
                 } else {
                     $this->streaming()->stopStream($channel);
