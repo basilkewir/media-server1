@@ -47,11 +47,11 @@ if [ ! -d "$MEDIASERVER_DIR" ]; then
 fi
 ok "MediaServer directory found"
 
-# Check if Flussonic is installed
-if ! command -v flussonic &> /dev/null; then
-    error "Flussonic is not installed or not in PATH. Please install Flussonic first."
+# Check if Flussonic service exists
+if ! systemctl list-unit-files | grep -q flussonic; then
+    error "Flussonic service not found. Please install Flussonic first."
 fi
-ok "Flussonic is installed"
+ok "Flussonic service found"
 
 # Check if Flussonic config exists
 if [ ! -f "$FLUSSONIC_CONF" ]; then
