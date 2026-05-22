@@ -3,8 +3,9 @@
 return [
 
     'ffmpeg' => [
-        'path'      => env('FFMPEG_PATH', '/usr/bin/ffmpeg'),
-        'log_level' => env('FFMPEG_LOG_LEVEL', 'warning'),
+        'path'       => env('FFMPEG_PATH', '/usr/bin/ffmpeg'),
+        'probe_path' => env('FFPROBE_PATH', '/usr/bin/ffprobe'),
+        'log_level'  => env('FFMPEG_LOG_LEVEL', 'warning'),
     ],
 
     'stream' => [
@@ -37,6 +38,27 @@ return [
     'rtmp' => [
         'host' => env('RTMP_HOST', 'localhost'),
         'port' => env('RTMP_PORT', 1935),
+    ],
+
+    // ── Media Server Backend ──────────────────────────────────────────────────
+    // driver: 'ffmpeg' (built-in) | 'wowza' | 'flussonic'
+    'media_server' => [
+        'driver' => env('MEDIA_SERVER_DRIVER', 'ffmpeg'),
+    ],
+
+    // Wowza Streaming Engine (when driver=wowza)
+    'wowza' => [
+        'url'         => env('WOWZA_URL', 'http://localhost:8087'),
+        'username'    => env('WOWZA_USERNAME', 'admin'),
+        'password'    => env('WOWZA_PASSWORD', 'admin'),
+        'application' => env('WOWZA_APPLICATION', 'live'),
+    ],
+
+    // Flussonic Media Server (when driver=flussonic)
+    'flussonic' => [
+        'url'      => env('FLUSSONIC_URL', 'http://localhost:8080'),
+        'username' => env('FLUSSONIC_USERNAME', 'admin'),
+        'password' => env('FLUSSONIC_PASSWORD', 'admin'),
     ],
 
 ];

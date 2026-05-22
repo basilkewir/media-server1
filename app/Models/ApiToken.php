@@ -40,4 +40,15 @@ class ApiToken extends Model
             ->where('is_active', true)
             ->first();
     }
+
+    public static function generate(string $name): static
+    {
+        $plain = bin2hex(random_bytes(32));
+        $token = static::create([
+            'name'  => $name,
+            'token' => hash('sha256', $plain),
+        ]);
+        $token->plain_token = $plain;
+        return $token;
+    }
 }

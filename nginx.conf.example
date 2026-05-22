@@ -1,6 +1,6 @@
 # /etc/nginx/nginx.conf
-# MediaServer - Nginx configuration with RTMP module
-# Install: sudo apt-get install nginx libnginx-mod-rtmp
+# MediaServer — Full streaming ingest + HTTP server
+# Requires: nginx with rtmp module  →  apt install libnginx-mod-rtmp
 
 user www-data;
 worker_processes auto;
@@ -8,11 +8,11 @@ pid /run/nginx.pid;
 include /etc/nginx/modules-enabled/*.conf;
 
 events {
-    worker_connections 1024;
+    worker_connections 4096;
     multi_accept on;
 }
 
-# ── RTMP (live push ingest) ───────────────────────────────────────────────────
+# ── RTMP Ingest (OBS / encoder push on port 1935) ────────────────────────────
 rtmp {
     server {
         listen 1935;
@@ -23,12 +23,11 @@ rtmp {
             live on;
             record off;
 
-            # Notify MediaServer API when a stream starts/stops
-            # MediaServer will start FFmpeg → HLS output and monitor health
+            # Notify Laravel when a stream starts — Laravel starts FFmpeg
+            # Stream key = channel slug  →  rtmp://server/live/{slug}
             on_publish      http://127.0.0.1/api/streams/start;
             on_publish_done http://127.0.0.1/api/streams/stop;
 
-            # Allow push from anywhere (restrict in production)
             allow publish all;
             allow play all;
         }
@@ -44,47 +43,54 @@ http {
     default_type application/octet-stream;
 
     gzip on;
-    gzip_types text/plain application/json application/javascript text/css;
+    gzip_types text/plain application/json application/javascript text/css application/vnd.apple.mpegurl application/dash+xml;
 
     server {
         listen 80 default_server;
         server_name _;
-        root /var/www/media-server/public;
+        root /var/www/mediaserver/public;
         index index.php;
+        client_max_body_size 10240M;
 
         # CORS for HLS/DASH players
         add_header Access-Control-Allow-Origin  "*" always;
         add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
         add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
 
-        if ($request_method = OPTIONS) {
-            return 204;
-        }
+        if ($request_method = OPTIONS) { return 204; }
 
         location / {
             try_files $uri $uri/ /index.php?$query_string;
         }
 
         location ~ \.php$ {
-            fastcgi_pass   unix:/var/run/php/php8.2-fpm.sock;
+            fastcgi_pass   unix:/run/php/php8.3-fpm.sock;
             fastcgi_index  index.php;
             fastcgi_param  SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
             include        fastcgi_params;
             fastcgi_read_timeout 300;
+            fastcgi_buffer_size 128k;
+            fastcgi_buffers 4 256k;
         }
 
-        # Serve HLS/DASH segments directly from storage (bypass PHP)
+        # Serve HLS/DASH segments directly (bypass PHP for speed)
         location /streams/ {
-            alias /var/www/media-server/storage/streams/;
+            alias /var/www/mediaserver/storage/streams/;
             expires -1;
             add_header Cache-Control "no-cache, no-store, must-revalidate";
             add_header Access-Control-Allow-Origin "*";
-
             types {
                 application/vnd.apple.mpegurl  m3u8;
                 video/MP2T                     ts;
                 application/dash+xml           mpd;
             }
+        }
+
+        # Serve VOD files directly
+        location /vod/ {
+            alias /var/www/mediaserver/storage/vod/;
+            add_header Access-Control-Allow-Origin "*";
+            add_header Cache-Control "public, max-age=3600";
         }
 
         location ~ /\.ht { deny all; }

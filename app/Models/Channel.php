@@ -49,6 +49,11 @@ class Channel extends Model
         return $this->hasMany(OutputTarget::class);
     }
 
+    public function vodFiles(): HasMany
+    {
+        return $this->hasMany(\App\Models\VodFile::class);
+    }
+
     public function managers(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'channel_user');

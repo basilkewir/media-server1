@@ -7,6 +7,7 @@ use App\Http\Controllers\API\IcecastController;
 use App\Http\Controllers\API\RelayBroadcastController;
 use App\Http\Controllers\API\OutputTargetController;
 use App\Http\Controllers\API\AccessCodeController;
+use App\Http\Controllers\API\RtmpWebhookController;
 
 Route::get('/health', fn() => response()->json([
     'status' => 'ok',
@@ -16,6 +17,10 @@ Route::get('/health', fn() => response()->json([
     'environment' => app()->environment(),
 ]));
 
+// ── RTMP Webhooks (called by nginx-rtmp or SRS, no auth needed) ────────────
+Route::post('streams/start', [RtmpWebhookController::class, 'onPublish']);
+Route::post('streams/stop',  [RtmpWebhookController::class, 'onPublishDone']);
+
 Route::middleware(['auth.api', 'throttle.api'])->group(function () {
 
     // ── Channels ──────────────────────────────────────────────────────────────
@@ -24,9 +29,9 @@ Route::middleware(['auth.api', 'throttle.api'])->group(function () {
     Route::get('channels/{channel}/events',  [ChannelController::class, 'events']);
 
     // ── Streams ───────────────────────────────────────────────────────────────
-    Route::post('streams/start',                  [StreamController::class, 'start'])
+    Route::post('streams/launch',                 [StreamController::class, 'start'])
         ->middleware('throttle:stream_start');
-    Route::post('streams/stop',                   [StreamController::class, 'stop']);
+    Route::post('streams/halt',                   [StreamController::class, 'stop']);
     Route::post('streams/probe',                  [StreamController::class, 'probe']);
     Route::get('streams/{channel}/status',        [StreamController::class, 'status']);
     Route::post('streams/{channel}/fallback',     [StreamController::class, 'fallback']);

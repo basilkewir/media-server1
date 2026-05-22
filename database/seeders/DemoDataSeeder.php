@@ -36,11 +36,11 @@ class DemoDataSeeder extends Seeder
         $this->command->info('Default API Token: ' . $token->plain_token);
 
         // Create sample channels
-        $channels = Channel::factory()->count(3)->sequence(
+        $channels = collect([
             ['name' => 'Main Channel', 'slug' => 'main'],
             ['name' => 'Sports Channel', 'slug' => 'sports'],
             ['name' => 'News Channel', 'slug' => 'news'],
-        )->create();
+        ])->map(fn($attrs) => Channel::firstOrCreate(['slug' => $attrs['slug']], $attrs));
 
         // Create output targets for each channel
         foreach ($channels as $channel) {

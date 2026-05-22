@@ -10,9 +10,13 @@ use Exception;
 class StreamHealthMonitor
 {
     public function __construct(
-        protected StreamingService $streamingService,
         protected ProtocolDetector $protocol
     ) {}
+
+    protected function streaming(): StreamingService
+    {
+        return app(StreamingService::class);
+    }
 
     public function checkStreamHealth(Channel $channel): bool
     {
@@ -28,9 +32,9 @@ class StreamHealthMonitor
 
             // On VOD fallback — just keep FFmpeg alive
             if ($stream->status === 'fallback') {
-                if (!$this->streamingService->isFFmpegRunning($channel)) {
+                if (!$this->streaming()->isFFmpegRunning($channel)) {
                     Log::warning('VOD fallback FFmpeg died, restarting', ['channel' => $channel->slug]);
-                    $this->streamingService->switchToVODFallback($channel);
+                    $this->streaming()->switchToVODFallback($channel);
                 }
                 return true;
             }
@@ -49,15 +53,15 @@ class StreamHealthMonitor
                 if ($channel->vod_playlist_url) {
                     $this->triggerVODFallback($channel);
                 } else {
-                    $this->streamingService->stopStream($channel);
+                    $this->streaming()->stopStream($channel);
                 }
                 return false;
             }
 
             // Source reachable but FFmpeg died — restart
-            if (!$this->streamingService->isFFmpegRunning($channel)) {
+            if (!$this->streaming()->isFFmpegRunning($channel)) {
                 Log::warning('FFmpeg died, restarting live stream', ['channel' => $channel->slug]);
-                $this->streamingService->startStream($channel, $stream->source_url);
+                $this->streaming()->startStream($channel, $stream->source_url);
                 return false;
             }
 
@@ -70,7 +74,7 @@ class StreamHealthMonitor
 
     protected function triggerVODFallback(Channel $channel): void
     {
-        $this->streamingService->switchToVODFallback($channel);
+        $this->streaming()->switchToVODFallback($channel);
 
         StreamEvent::create([
             'channel_id' => $channel->id,
@@ -94,7 +98,7 @@ class StreamHealthMonitor
             'status'            => $stream?->status ?? 'offline',
             'stream_type'       => $stream?->stream_type,
             'input_protocol'    => $stream?->input_protocol,
-            'ffmpeg_running'    => $this->streamingService->isFFmpegRunning($channel),
+            'ffmpeg_running'    => $this->streaming()->isFFmpegRunning($channel),
             'uptime_percentage' => $stream?->getUptimePercentage() ?? 0,
             'duration'          => $stream?->getDuration() ?? 0,
         ];

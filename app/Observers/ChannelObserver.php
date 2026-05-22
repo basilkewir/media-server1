@@ -13,14 +13,13 @@ class ChannelObserver
     public function created(Channel $channel): void
     {
         Log::info('Channel created', ['channel_id' => $channel->id, 'slug' => $channel->slug]);
-        Cache::tags(['channels'])->flush();
+        $this->flushChannelCache($channel->slug);
     }
 
     public function updated(Channel $channel): void
     {
         Log::info('Channel updated', ['channel_id' => $channel->id, 'slug' => $channel->slug]);
-        Cache::forget("channel:{$channel->slug}");
-        Cache::tags(['channels'])->flush();
+        $this->flushChannelCache($channel->slug);
     }
 
     public function deleted(Channel $channel): void
@@ -34,7 +33,15 @@ class ChannelObserver
             @rmdir($dir);
         }
 
-        Cache::forget("channel:{$channel->slug}");
-        Cache::tags(['channels'])->flush();
+        $this->flushChannelCache($channel->slug);
+    }
+
+    private function flushChannelCache(string $slug): void
+    {
+        Cache::forget("channel:{$slug}");
+        Cache::forget('channels:all');
+        if (method_exists(Cache::getStore(), 'tags')) {
+            Cache::tags(['channels'])->flush();
+        }
     }
 }

@@ -7,17 +7,32 @@ namespace App\Services;
 use App\Models\Channel;
 use App\Models\Stream;
 use App\Models\StreamEvent;
+use App\Services\MediaServer\MediaServerManager;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Container\Container;
 use Symfony\Component\Process\Process;
 
 class StreamingService
 {
     public function __construct(
         protected ProtocolDetector $protocol,
-        protected OutputManager    $outputManager,
     ) {}
+
+    /**
+     * Returns the configured media server driver (Wowza, Flussonic, or FFmpeg).
+     * When an external driver is active it handles ingest; FFmpeg is used as fallback.
+     */
+    protected function useExternalDriver(): bool
+    {
+        return config('services.media_server.driver', 'ffmpeg') !== 'ffmpeg';
+    }
+
+    protected function outputManager(): OutputManager
+    {
+        return Container::getInstance()->make(OutputManager::class);
+    }
 
     public function startStream(Channel $channel, string $sourceUrl): Stream
     {
@@ -35,9 +50,13 @@ class StreamingService
                 'started_at'     => now(),
             ]);
 
-            $this->startIngest($channel, $sourceUrl, loop: false);
+            if ($this->useExternalDriver()) {
+                MediaServerManager::driver()->startIngest($channel, $sourceUrl, false);
+            } else {
+                $this->startIngest($channel, $sourceUrl, loop: false);
+            }
             $channel->update(['is_live' => true, 'push_url' => $sourceUrl]);
-            $this->outputManager->startChannelOutputs($channel, 'live');
+            $this->outputManager()->startChannelOutputs($channel, 'live');
 
             StreamEvent::create([
                 'channel_id' => $channel->id,
@@ -53,8 +72,12 @@ class StreamingService
     public function stopStream(Channel $channel): bool
     {
         return DB::transaction(function () use ($channel) {
-            $this->outputManager->stopChannelOutputs($channel);
-            $this->stopIngest($channel);
+            $this->outputManager()->stopChannelOutputs($channel);
+            if ($this->useExternalDriver()) {
+                MediaServerManager::driver()->stopIngest($channel);
+            } else {
+                $this->stopIngest($channel);
+            }
 
             $channel->streams()
                 ->whereIn('status', ['active', 'fallback'])
@@ -82,7 +105,7 @@ class StreamingService
         $vodUrl = $this->sanitizeUrl($channel->vod_playlist_url);
 
         return DB::transaction(function () use ($channel, $vodUrl) {
-            $this->outputManager->stopChannelOutputs($channel, 'live');
+            $this->outputManager()->stopChannelOutputs($channel, 'live');
             $this->stopIngest($channel);
 
             $channel->streams()
@@ -98,9 +121,13 @@ class StreamingService
                 'started_at'     => now(),
             ]);
 
-            $this->startIngest($channel, $vodUrl, loop: true);
+            if ($this->useExternalDriver()) {
+                MediaServerManager::driver()->startIngest($channel, $vodUrl, true);
+            } else {
+                $this->startIngest($channel, $vodUrl, loop: true);
+            }
             $channel->update(['is_live' => true]);
-            $this->outputManager->startChannelOutputs($channel, 'fallback');
+            $this->outputManager()->startChannelOutputs($channel, 'fallback');
 
             StreamEvent::create([
                 'channel_id' => $channel->id,
@@ -118,7 +145,7 @@ class StreamingService
         $liveUrl = $this->sanitizeUrl($liveUrl);
 
         return DB::transaction(function () use ($channel, $liveUrl) {
-            $this->outputManager->stopChannelOutputs($channel, 'fallback');
+            $this->outputManager()->stopChannelOutputs($channel, 'fallback');
             $this->stopIngest($channel);
 
             $channel->streams()
@@ -147,7 +174,7 @@ class StreamingService
         }
 
         $pipe = $this->pipePath($channel);
-        if (!file_exists($pipe)) {
+        if (function_exists('posix_mkfifo') && !file_exists($pipe)) {
             posix_mkfifo($pipe, 0600);
         }
 
@@ -165,20 +192,20 @@ class StreamingService
             $cmd[] = $arg;
         }
 
-        $cmd[] = '-i';
-        $cmd[] = $sourceUrl;
+        array_push($cmd, '-i', $sourceUrl);
 
-        $hlsDir      = $outputDir;
         $hlsDuration = (string) config('services.stream.hls_segment_duration', 2);
         $hlsListSize = (string) config('services.stream.hls_segments_in_playlist', 10);
+        $ladder      = $this->buildAbrLadder($channel);
 
-        $teeOutputs = implode('|', [
-            "[f=mpegts:onfail=ignore]{$pipe}",
-            "[f=hls:hls_time={$hlsDuration}:hls_list_size={$hlsListSize}"
-                . ":hls_flags=delete_segments+append_list+independent_segments"
-                . ":hls_segment_type=mpegts"
-                . ":hls_segment_filename={$hlsDir}/seg%05d.ts]{$hlsDir}/playlist.m3u8",
-        ]);
+        if (count($ladder) > 1) {
+            // ── Multi-bitrate ABR ────────────────────────────────────────────
+            $this->startAbrIngest($cmd, $channel, $outputDir, $hlsDuration, $hlsListSize, $ladder, $pipe);
+            return;
+        }
+
+        // ── Single quality (copy) ────────────────────────────────────────────
+        $teeOutputs = $this->buildTeeOutputs($outputDir, $hlsDuration, $hlsListSize, $pipe);
 
         array_push($cmd,
             '-c:v', 'copy',
@@ -188,6 +215,136 @@ class StreamingService
             $teeOutputs
         );
 
+        $this->launchProcess($cmd, $channel, $sourceUrl, $loop, $pipe);
+    }
+
+    /**
+     * Build ABR ladder from channel settings.
+     * Returns array of [width, height, vbitrate, abitrate] or empty for copy.
+     */
+    protected function buildAbrLadder(Channel $channel): array
+    {
+        $resolution = $channel->resolution;
+        $bitrate    = $channel->bitrate_kbps;
+
+        if (!$resolution || !$bitrate) {
+            return []; // single quality copy
+        }
+
+        [$w, $h] = array_map('intval', explode('x', strtolower($resolution)));
+
+        $ladder = [];
+
+        // Always include the source quality
+        $ladder[] = ['w' => $w, 'h' => $h, 'vbr' => $bitrate, 'abr' => 128, 'suffix' => "{$h}p"];
+
+        // Add lower rungs if source is HD
+        if ($h >= 1080) {
+            $ladder[] = ['w' => 1280, 'h' => 720,  'vbr' => (int)($bitrate * 0.5),  'abr' => 128, 'suffix' => '720p'];
+            $ladder[] = ['w' => 854,  'h' => 480,  'vbr' => (int)($bitrate * 0.25), 'abr' => 96,  'suffix' => '480p'];
+            $ladder[] = ['w' => 640,  'h' => 360,  'vbr' => (int)($bitrate * 0.12), 'abr' => 64,  'suffix' => '360p'];
+        } elseif ($h >= 720) {
+            $ladder[] = ['w' => 854,  'h' => 480,  'vbr' => (int)($bitrate * 0.5),  'abr' => 96,  'suffix' => '480p'];
+            $ladder[] = ['w' => 640,  'h' => 360,  'vbr' => (int)($bitrate * 0.25), 'abr' => 64,  'suffix' => '360p'];
+        }
+
+        return $ladder;
+    }
+
+    protected function startAbrIngest(
+        array $baseCmd, Channel $channel, string $outputDir,
+        string $hlsDuration, string $hlsListSize,
+        array $ladder, string $pipe
+    ): void {
+        $cmd = $baseCmd;
+
+        // One filter_complex split into N renditions
+        $splits = count($ladder);
+        $splitMap = implode('', array_map(fn($i) => "[v{$i}]", range(0, $splits - 1)));
+        array_push($cmd, '-filter_complex', "[0:v]split={$splits}{$splitMap}");
+
+        $teeOutputs = [];
+
+        // Pipe output (source quality copy for OutputManager)
+        if (file_exists($pipe)) {
+            $teeOutputs[] = "[f=mpegts:onfail=ignore]{$pipe}";
+        }
+
+        foreach ($ladder as $i => $rung) {
+            $dir = "{$outputDir}/{$rung['suffix']}";
+            if (!is_dir($dir)) mkdir($dir, 0755, true);
+
+            array_push($cmd,
+                "-map", "[v{$i}]",
+                "-map", '0:a',
+                "-c:v:{$i}", 'libx264',
+                "-b:v:{$i}", $rung['vbr'] . 'k',
+                "-maxrate:{$i}", $rung['vbr'] . 'k',
+                "-bufsize:{$i}", ($rung['vbr'] * 2) . 'k',
+                "-vf:{$i}", "scale={$rung['w']}:{$rung['h']}",
+                "-preset:{$i}", 'veryfast',
+                "-c:a:{$i}", 'aac',
+                "-b:a:{$i}", $rung['abr'] . 'k'
+            );
+
+            // HLS per rendition
+            $teeOutputs[] =
+                "[f=hls:hls_time={$hlsDuration}:hls_list_size={$hlsListSize}"
+                . ":hls_flags=delete_segments+append_list+independent_segments"
+                . ":hls_segment_type=mpegts"
+                . ":hls_segment_filename={$dir}/seg%05d.ts"
+                . ":var_stream_map=v:{$i},a:{$i}]{$dir}/playlist.m3u8";
+
+            // DASH per rendition
+            $teeOutputs[] =
+                "[f=dash:seg_duration={$hlsDuration}:remove_at_exit=0"
+                . ":window_size={$hlsListSize}]{$dir}/manifest.mpd";
+        }
+
+        array_push($cmd, '-f', 'tee', implode('|', $teeOutputs));
+
+        // Write master HLS playlist
+        $this->writeMasterPlaylist($channel, $outputDir, $ladder);
+
+        $this->launchProcess($cmd, $channel, '', false, $pipe);
+    }
+
+    protected function buildTeeOutputs(string $outputDir, string $hlsDuration, string $hlsListSize, string $pipe): string
+    {
+        $outputs = [];
+
+        if (file_exists($pipe)) {
+            $outputs[] = "[f=mpegts:onfail=ignore]{$pipe}";
+        }
+
+        // HLS
+        $outputs[] =
+            "[f=hls:hls_time={$hlsDuration}:hls_list_size={$hlsListSize}"
+            . ":hls_flags=delete_segments+append_list+independent_segments"
+            . ":hls_segment_type=mpegts"
+            . ":hls_segment_filename={$outputDir}/seg%05d.ts]{$outputDir}/playlist.m3u8";
+
+        // DASH
+        $outputs[] =
+            "[f=dash:seg_duration={$hlsDuration}:remove_at_exit=0"
+            . ":window_size={$hlsListSize}]{$outputDir}/manifest.mpd";
+
+        return implode('|', $outputs);
+    }
+
+    protected function writeMasterPlaylist(Channel $channel, string $outputDir, array $ladder): void
+    {
+        $lines = ['#EXTM3U', '#EXT-X-VERSION:3'];
+        foreach ($ladder as $rung) {
+            $bw = $rung['vbr'] * 1000;
+            $lines[] = "#EXT-X-STREAM-INF:BANDWIDTH={$bw},RESOLUTION={$rung['w']}x{$rung['h']}";
+            $lines[] = "{$rung['suffix']}/playlist.m3u8";
+        }
+        file_put_contents("{$outputDir}/master.m3u8", implode("\n", $lines));
+    }
+
+    protected function launchProcess(array $cmd, Channel $channel, string $sourceUrl, bool $loop, string $pipe): void
+    {
         $process = new Process($cmd);
         $process->setTimeout(null);
         $process->setIdleTimeout(null);
@@ -201,7 +358,7 @@ class StreamingService
         Log::info('Ingest started', [
             'channel'  => $channel->slug,
             'pid'      => $pid,
-            'protocol' => $this->protocol->label($sourceUrl),
+            'protocol' => $sourceUrl ? $this->protocol->label($sourceUrl) : 'abr',
             'loop'     => $loop,
             'pipe'     => $pipe,
         ]);
@@ -240,6 +397,9 @@ class StreamingService
 
     public function isIngestRunning(Channel $channel): bool
     {
+        if ($this->useExternalDriver()) {
+            return MediaServerManager::driver()->isRunning($channel);
+        }
         $pid = Cache::get("ingest_pid:{$channel->id}");
         return $pid && is_int($pid) && file_exists("/proc/{$pid}");
     }

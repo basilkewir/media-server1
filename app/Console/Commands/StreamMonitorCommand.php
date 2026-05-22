@@ -13,10 +13,7 @@ class StreamMonitorCommand extends Command
     protected $signature = 'stream:monitor {--interval=5 : Health check interval in seconds}';
     protected $description = 'Monitor stream health, trigger VOD fallback, and maintain output targets';
 
-    public function __construct(
-        protected StreamHealthMonitor $monitor,
-        protected OutputManager       $outputManager,
-    ) {
+    public function __construct() {
         parent::__construct();
     }
 
@@ -43,8 +40,8 @@ class StreamMonitorCommand extends Command
 
         while (true) {
             try {
-                $this->monitor->checkAllChannels();
-                $this->outputManager->checkAllTargets();
+                app(StreamHealthMonitor::class)->checkAllChannels();
+                app(OutputManager::class)->checkAllTargets();
             } catch (\Exception $e) {
                 $this->error('Monitor error: ' . $e->getMessage());
             }
