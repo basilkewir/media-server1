@@ -108,17 +108,21 @@ echo $$ > "$PID_FILE"
 
 # Start SRT server using FFmpeg
 # This listens on the SRT port and relays to Flussonic RTMP
+# Format: ffmpeg [INPUT_OPTIONS] -i input [OUTPUT_OPTIONS] output
 ffmpeg \
+    -hide_banner \
     -protocol_whitelist "file,http,https,tcp,tls,srt,crypto" \
+    -f mpegts \
     -listen 1 \
-    -i "srt://0.0.0.0:$SRT_LISTEN_PORT?mode=listener&latency=1000&transtype=live&pkt_size=1316" \
+    -i "srt://0.0.0.0:$SRT_LISTEN_PORT" \
     -c:v copy \
-    -c:a aac \
+    -c:a copy \
     -f flv \
+    -flvflags no_duration_filesize \
     "rtmp://$RTMP_RELAY_HOST:$RTMP_RELAY_PORT/live/$STREAM_ID" \
     2>&1 | tee -a "$LOG_FILE" | while read line; do
         # Look for connection indicators
-        if echo "$line" | grep -iq "Connection from\|Opening\|Connected"; then
+        if echo "$line" | grep -iq "Connection from\|Opening\|Connected\|srt.*started"; then
             info "Encoder connected: $line"
             # Call webhook to notify Laravel
             curl -s "$WEBHOOK_URL?streamid=$STREAM_ID" > /dev/null 2>&1 || true
