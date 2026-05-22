@@ -55,10 +55,11 @@ return [
     ],
 
     // Flussonic Media Server (when driver=flussonic)
+    // Runs on port 8935 (moved from 80 to avoid conflict with Nginx)
     'flussonic' => [
-        'url'      => env('FLUSSONIC_URL', 'http://localhost:8080'),
-        'username' => env('FLUSSONIC_USERNAME', 'admin'),
-        'password' => env('FLUSSONIC_PASSWORD', 'admin'),
+        'url'      => env('FLUSSONIC_URL', 'http://localhost:8935'),
+        'username' => env('FLUSSONIC_USERNAME', 'flussonic'),
+        'password' => env('FLUSSONIC_PASSWORD', 'letmein!'),
     ],
 
 ];
