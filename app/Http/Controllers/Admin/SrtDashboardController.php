@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Models\SrtStream;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Facades\Log;
 
 class SrtDashboardController extends Controller
 {
@@ -13,6 +14,8 @@ class SrtDashboardController extends Controller
      */
     public function widget()
     {
+    $this->syncRuntimeStatsToDatabase();
+
         $streams = SrtStream::all();
         $activeStreams = SrtStream::where('enabled', true)->count();
         $totalStreams = $streams->count();
@@ -99,6 +102,8 @@ class SrtDashboardController extends Controller
      */
     public function status()
     {
+    $this->syncRuntimeStatsToDatabase();
+
         $streams = SrtStream::all();
         $statusData = [];
 
@@ -131,5 +136,72 @@ class SrtDashboardController extends Controller
     {
         $output = shell_exec("ss -tlnup 2>/dev/null | grep :{$port}");
         return !empty($output);
+    }
+
+    /**
+     * Best-effort sync of live runtime stats (status, last connected, bitrate) into DB.
+     *
+     * Data sources:
+     * - /var/www/mediaserver/storage/logs/srt-server.log (FFmpeg logger output)
+     * - Port listening check (ss)
+     *
+     * This keeps the UI accurate without requiring manual DB updates.
+     */
+    private function syncRuntimeStatsToDatabase(): void
+    {
+        try {
+            $logFile = storage_path('logs/srt-server.log');
+            $logText = '';
+
+            if (file_exists($logFile)) {
+                // Avoid loading unbounded logs.
+                $logText = (string) @file_get_contents($logFile, false, null, 0, 1024 * 1024);
+                if ($logText === false) {
+                    $logText = '';
+                }
+            }
+
+            $streams = SrtStream::all();
+            foreach ($streams as $stream) {
+                $isListening = $this->checkPortListening($stream->srt_port);
+
+                // Parse latest bitrate from logs if present.
+                $bitrateKbps = null;
+                if ($logText !== '') {
+                    $pattern = "/\\[FFmpeg-" . preg_quote($stream->stream_id, '/') . "\\].*?bitrate=(\\d+(?:\\.\\d+)?)kbits\\/s/is";
+                    if (preg_match_all($pattern, $logText, $m) && !empty($m[1])) {
+                        $bitrateKbps = (int) round((float) end($m[1]));
+                    }
+                }
+
+                $dirty = false;
+
+                // If port is listening, consider it connected (daemon running for that port).
+                $newStatus = $isListening ? 'connected' : 'disconnected';
+                if ($stream->status !== $newStatus) {
+                    $stream->status = $newStatus;
+                    $dirty = true;
+
+                    if ($newStatus === 'connected') {
+                        $stream->last_connected_at = now();
+                        $dirty = true;
+                    }
+                }
+
+                if ($bitrateKbps !== null && $bitrateKbps > 0 && (int) $stream->bitrate !== $bitrateKbps) {
+                    $stream->bitrate = $bitrateKbps;
+                    $dirty = true;
+                }
+
+                if ($dirty) {
+                    $stream->save();
+                }
+            }
+        } catch (\Throwable $e) {
+            // Never break the dashboard due to stats parsing.
+            Log::warning('SRT dashboard runtime stats sync failed', [
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }
