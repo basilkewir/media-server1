@@ -191,6 +191,9 @@
         <a href="{{ route('admin.channels.index') }}" class="{{ request()->routeIs('admin.channels.*') || request()->routeIs('admin.vod.*') ? 'active' : '' }}">
             <span class="icon">📺</span> Channels
         </a>
+        <a href="{{ route('admin.srt-streams.index') }}" class="{{ request()->routeIs('admin.srt-streams.*') ? 'active' : '' }}">
+            <span class="icon">📡</span> SRT Streams
+        </a>
     </nav>
 
     <div class="sidebar-section">Access</div>
