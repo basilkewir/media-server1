@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 """
-SRT Server for Media Server
-Uses srt-live-transmit to receive SRT streams and relay to Flussonic RTMP
-This is the most reliable approach using the dedicated SRT tool.
+SRT Server for Media Server (Stable Implementation)
+Uses a two-stage relay:
+1. srt-live-transmit receives SRT and outputs to local UDP
+2. FFmpeg reads UDP and forwards to Flussonic RTMP
 """
 
 import os
@@ -12,6 +13,7 @@ import subprocess
 import logging
 import signal
 import time
+import threading
 
 # Setup logging
 log_file = '/var/www/mediaserver/storage/logs/srt-server.log'
@@ -29,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 SRT_LISTEN_PORT = 9000
+UDP_RELAY_PORT = 5000  # Internal UDP relay port
 RTMP_RELAY_HOST = '127.0.0.1'
 RTMP_RELAY_PORT = 1935
 STREAM_ID = 'compassiontv'
@@ -38,48 +41,56 @@ def signal_handler(sig, frame):
     logger.info('Received signal - shutting down...')
     sys.exit(0)
 
-def check_srt_tools():
-    """Check if srt-live-transmit is available"""
-    result = subprocess.run(['which', 'srt-live-transmit'], capture_output=True)
-    return result.returncode == 0
-
 def main():
     """Main entry point"""
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
     
-    srt_input = f'srt://:{SRT_LISTEN_PORT}?mode=listener&transtype=live&latency=1000'
+    srt_listen = f'srt://:{SRT_LISTEN_PORT}?mode=listener&latency=1000'
+    udp_relay = f'udp://127.0.0.1:{UDP_RELAY_PORT}'
     rtmp_output = f'rtmp://{RTMP_RELAY_HOST}:{RTMP_RELAY_PORT}/live/{STREAM_ID}'
     
     logger.info('='*70)
-    logger.info('SRT Server Starting')
+    logger.info('SRT Server Starting (Two-Stage Relay)')
     logger.info('='*70)
-    logger.info(f'SRT Listen: srt://0.0.0.0:{SRT_LISTEN_PORT} (mode=listener)')
-    logger.info(f'RTMP Relay: {rtmp_output}')
-    logger.info('Waiting for encoder connections...')
+    logger.info(f'SRT Listen: srt://0.0.0.0:{SRT_LISTEN_PORT}')
+    logger.info(f'Internal Relay: UDP {udp_relay}')
+    logger.info(f'RTMP Output: {rtmp_output}')
     logger.info('='*70)
     
+    # Start SRT receiver in background thread
+    srt_thread = threading.Thread(
+        target=start_srt_receiver,
+        args=(srt_listen, udp_relay),
+        daemon=False
+    )
+    srt_thread.start()
+    
+    # Wait a moment for SRT to start
+    time.sleep(2)
+    
+    # Start FFmpeg relay in main thread (will restart on exit)
+    while True:
+        try:
+            start_ffmpeg_relay(udp_relay, rtmp_output)
+        except KeyboardInterrupt:
+            logger.info('Keyboard interrupt')
+            sys.exit(0)
+        except Exception as e:
+            logger.error(f'Error in main loop: {e}')
+            time.sleep(3)
+
+def start_srt_receiver(srt_listen, udp_output):
+    """Start srt-live-transmit to receive SRT and output UDP"""
     try:
-        # Use srt-live-transmit - the dedicated SRT relay tool
-        # This is more stable than FFmpeg for SRT listening
-        
-        # First, check if srt-live-transmit is available
-        if not check_srt_tools():
-            logger.warning('srt-live-transmit not found, attempting to install...')
-            logger.warning('Run: sudo apt-get install -y srt-tools')
-            logger.info('Falling back to FFmpeg relay with simplified approach...')
-            use_ffmpeg_fallback()
-            return
-        
-        # Primary method: Use srt-live-transmit for SRT listening and RTMP output
+        # srt-live-transmit receives SRT and outputs to UDP
         cmd = [
             'srt-live-transmit',
-            '-loglevel', 'info',
-            srt_input,
-            rtmp_output
+            srt_listen,
+            udp_output
         ]
         
-        logger.info(f'Using srt-live-transmit for relay (recommended)')
+        logger.info(f'Starting SRT receiver with srt-live-transmit')
         logger.info(f'Command: {" ".join(cmd)}')
         
         process = subprocess.Popen(
@@ -90,48 +101,75 @@ def main():
             bufsize=1
         )
         
-        # Monitor relay output
+        # Monitor output
         for line in process.stdout:
             line = line.strip()
             if line:
-                logger.info(f'[SRT-Relay] {line}')
+                logger.info(f'[SRT-RX] {line}')
         
         process.wait()
         logger.error(f'srt-live-transmit exited with code {process.returncode}')
         
-        # Auto-restart on exit
-        logger.info('Waiting 3 seconds before restart...')
+        # Restart
+        logger.info('Restarting SRT receiver in 3 seconds...')
         time.sleep(3)
-        main()  # Recursive restart
+        start_srt_receiver(srt_listen, udp_output)
         
     except FileNotFoundError:
-        logger.error('srt-live-transmit not found - install with: sudo apt-get install -y srt-tools')
-        logger.info('Falling back to FFmpeg...')
-        use_ffmpeg_fallback()
-    except KeyboardInterrupt:
-        logger.info('Keyboard interrupt')
-        sys.exit(0)
+        logger.error('srt-live-transmit not found')
+        logger.error('Install with: sudo apt-get install -y srt-tools')
+        sys.exit(1)
     except Exception as e:
-        logger.error(f'Error: {e}')
+        logger.error(f'SRT receiver error: {e}')
         time.sleep(3)
-        main()  # Restart on error
+        start_srt_receiver(srt_listen, udp_output)
 
-def use_ffmpeg_fallback():
-    """Fallback to FFmpeg if srt-live-transmit is not available"""
-    # Note: This approach uses FFmpeg to push TO an RTMP server
-    # instead of listening on SRT (which requires complex FFmpeg options)
-    
-    rtmp_url = f'rtmp://{RTMP_RELAY_HOST}:{RTMP_RELAY_PORT}/live/{STREAM_ID}'
-    
-    # For FFmpeg fallback, we use a different approach:
-    # Create a simple wrapper that accepts input and forwards it
-    logger.warning('Using FFmpeg fallback (less stable than srt-live-transmit)')
-    logger.info('For better stability, install srt-tools: sudo apt-get install -y srt-tools')
-    
-    # This would require a more complex setup with intermediate processing
-    # For now, just exit and let supervisor restart
-    logger.error('FFmpeg fallback requires additional configuration - please install srt-tools')
-    sys.exit(1)
+def start_ffmpeg_relay(udp_input, rtmp_output):
+    """Start FFmpeg to relay UDP to RTMP"""
+    try:
+        # FFmpeg reads UDP MPEG-TS and outputs to RTMP
+        cmd = [
+            'ffmpeg',
+            '-hide_banner',
+            '-loglevel', 'info',
+            '-protocol_whitelist', 'file,http,https,tcp,tls,srt,crypto,rtp,udp',
+            '-i', udp_input,
+            '-c:v', 'copy',
+            '-c:a', 'copy',
+            '-f', 'flv',
+            '-flvflags', 'no_duration_filesize',
+            rtmp_output
+        ]
+        
+        logger.info(f'Starting FFmpeg relay (UDP → RTMP)')
+        
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+        
+        # Monitor output
+        for line in process.stdout:
+            line = line.strip()
+            if line:
+                logger.info(f'[FFmpeg] {line}')
+        
+        process.wait()
+        logger.error(f'FFmpeg exited with code {process.returncode}')
+        
+        # Wait before restart
+        logger.info('Waiting 3 seconds before FFmpeg restart...')
+        time.sleep(3)
+        
+    except FileNotFoundError:
+        logger.error('FFmpeg not found')
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f'FFmpeg relay error: {e}')
+        time.sleep(3)
 
 if __name__ == '__main__':
     main()
