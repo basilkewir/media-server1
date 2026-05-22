@@ -46,7 +46,7 @@ http {
     gzip_types text/plain application/json application/javascript text/css application/vnd.apple.mpegurl application/dash+xml;
 
     server {
-        listen 80 default_server;
+        listen 8080 default_server;
         server_name _;
         root /var/www/mediaserver/public;
         index index.php;
