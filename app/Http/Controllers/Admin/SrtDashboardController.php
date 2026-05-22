@@ -6,6 +6,7 @@ use App\Models\SrtStream;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Log;
+use App\Services\StreamingService;
 
 class SrtDashboardController extends Controller
 {
@@ -199,6 +200,23 @@ class SrtDashboardController extends Controller
                     if ($newStatus === 'connected') {
                         $stream->last_connected_at = now();
                         $dirty = true;
+                    } elseif ($newStatus === 'disconnected' && $stream->vod_fallback_enabled && $stream->channel_id) {
+                        // Trigger VOD fallback when SRT stream disconnects and it has VOD fallback enabled
+                        try {
+                            $channel = $stream->channel;
+                            if ($channel && $channel->vod_playlist_url) {
+                                app(StreamingService::class)->switchToVODFallback($channel);
+                                Log::info("SRT stream disconnected; switched to VOD fallback", [
+                                    'srt_stream' => $stream->name,
+                                    'channel' => $channel->slug,
+                                ]);
+                            }
+                        } catch (\Throwable $e) {
+                            Log::warning("Failed to trigger VOD fallback for SRT stream", [
+                                'srt_stream' => $stream->name,
+                                'error' => $e->getMessage(),
+                            ]);
+                        }
                     }
                 }
 

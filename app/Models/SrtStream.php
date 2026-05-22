@@ -4,18 +4,21 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SrtStream extends Model
 {
     use SoftDeletes;
 
     protected $fillable = [
+        'channel_id',
         'name',
         'stream_id',
         'srt_port',
         'rtmp_stream',
         'description',
         'enabled',
+        'vod_fallback_enabled',
         'bitrate',
         'resolution',
         'codec_video',
@@ -27,8 +30,17 @@ class SrtStream extends Model
 
     protected $casts = [
         'enabled' => 'boolean',
+        'vod_fallback_enabled' => 'boolean',
         'last_connected_at' => 'datetime',
     ];
+
+    /**
+     * Get the channel that owns this SRT stream.
+     */
+    public function channel(): BelongsTo
+    {
+        return $this->belongsTo(Channel::class);
+    }
 
     /**
      * Get all active SRT streams

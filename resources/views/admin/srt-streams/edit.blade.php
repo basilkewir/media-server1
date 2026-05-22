@@ -197,7 +197,7 @@
                 </div>
 
                 <!-- Status & Control -->
-                <div class="divider">Status</div>
+                <div class="divider">Status & Fallback</div>
 
                 <div class="grid grid-cols-2 gap-4">
                     <!-- Enabled Toggle -->
@@ -246,6 +246,80 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- VOD Fallback Config -->
+                <div class="divider">VOD Standby Playlist (Never Off-Air)</div>
+
+                <p class="text-sm text-gray-600 mb-4">
+                    When enabled, if the live SRT stream goes offline, the system will automatically play your VOD playlist so the channel never goes dark.
+                </p>
+
+                <!-- Link to Channel -->
+                <div class="form-group">
+                    <label class="form-label">
+                        <span class="label-text font-semibold">Link to Channel (for VOD Fallback)</span>
+                    </label>
+                    <select 
+                        name="channel_id" 
+                        class="select select-bordered w-full @error('channel_id') select-error @enderror"
+                    >
+                        <option value="">-- Select Channel (Optional) --</option>
+                        @foreach (\App\Models\Channel::orderBy('name')->get() as $ch)
+                            <option value="{{ $ch->id }}" @selected(old('channel_id', $stream->channel_id) == $ch->id)>
+                                {{ $ch->name }} ({{ $ch->slug }})
+                            </option>
+                        @endforeach
+                    </select>
+                    <p class="text-xs text-gray-500 mt-2">
+                        Select a channel to manage VOD files and enable automatic fallback.
+                    </p>
+                    @error('channel_id')
+                        <span class="text-error text-sm">{{ $message }}</span>
+                    @enderror
+                </div>
+
+                <!-- VOD Fallback Toggle -->
+                <div class="form-group">
+                    <label class="form-label">
+                        <span class="label-text font-semibold">Enable VOD Fallback</span>
+                    </label>
+                    <div class="flex items-center gap-4">
+                        <input 
+                            type="checkbox" 
+                            name="vod_fallback_enabled"
+                            id="vod-fallback-toggle"
+                            class="toggle toggle-success"
+                            @checked(old('vod_fallback_enabled', $stream->vod_fallback_enabled))
+                            {{ $stream->channel_id ? '' : 'disabled' }}
+                        >
+                        <span class="text-sm" id="vod-fallback-text">
+                            {{ old('vod_fallback_enabled', $stream->vod_fallback_enabled) ? '✓ Enabled' : '✗ Disabled' }}
+                        </span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">
+                        Requires a linked channel and VOD files configured.
+                    </p>
+                </div>
+
+                <!-- Manage VOD for this Channel -->
+                @if ($stream->channel_id)
+                    <div class="alert alert-info mt-4">
+                        <svg class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <div>
+                            <h3 class="font-bold">Manage VOD Files</h3>
+                            <div class="text-sm">
+                                To add VOD files for this channel's fallback, click the button below.
+                                <div class="mt-2">
+                                    <a href="{{ route('admin.vod.index', $stream->channel) }}" class="btn btn-sm btn-primary">
+                                        📁 Manage VOD Files
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @endif
 
                 <!-- Actions -->
                 <div class="divider">Save Changes</div>
@@ -297,6 +371,30 @@
         toggle.addEventListener('change', function() {
             text.textContent = this.checked ? '✓ Enabled' : '✗ Disabled';
         });
+    }
+
+    // Enable/disable VOD fallback toggle based on channel selection
+    const channelSelect = document.querySelector('select[name="channel_id"]');
+    const vodToggle = document.getElementById('vod-fallback-toggle');
+    const vodText = document.getElementById('vod-fallback-text');
+
+    if (channelSelect && vodToggle) {
+        const updateVodToggleState = () => {
+            const hasChannel = channelSelect.value !== '';
+            vodToggle.disabled = !hasChannel;
+            if (!hasChannel) {
+                vodToggle.checked = false;
+                vodText.textContent = '✗ Disabled (select channel first)';
+            }
+        };
+
+        channelSelect.addEventListener('change', updateVodToggleState);
+        vodToggle.addEventListener('change', function() {
+            vodText.textContent = this.checked ? '✓ Enabled' : '✗ Disabled';
+        });
+
+        // Initialize state on page load
+        updateVodToggleState();
     }
 </script>
 @endsection

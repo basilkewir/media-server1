@@ -120,6 +120,8 @@ class SrtStreamController extends Controller
         $validated = $request->validate([
             'name' => "required|string|unique:srt_streams,name,{$srtStream->id}|max:255",
             'description' => 'nullable|string|max:1000',
+            'channel_id' => 'nullable|exists:channels,id',
+            'vod_fallback_enabled' => 'nullable|boolean',
             'bitrate' => 'nullable|integer|min:100|max:50000',
             'resolution' => 'nullable|string',
             'codec_video' => 'nullable|string',
@@ -141,7 +143,7 @@ class SrtStreamController extends Controller
 
             Log::info("SRT Stream updated: {$srtStream->name}");
 
-            return redirect()->route('admin.srt-streams.show', $srtStream->id)
+            return redirect()->route('admin.srt-streams.index')
                 ->with('success', "Stream updated successfully");
         } catch (\Exception $e) {
             Log::error("Error updating SRT stream: " . $e->getMessage());

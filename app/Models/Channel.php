@@ -49,6 +49,11 @@ class Channel extends Model
         return $this->hasMany(OutputTarget::class);
     }
 
+    public function srtStreams(): HasMany
+    {
+        return $this->hasMany(\App\Models\SrtStream::class);
+    }
+
     public function vodFiles(): HasMany
     {
         return $this->hasMany(\App\Models\VodFile::class);
