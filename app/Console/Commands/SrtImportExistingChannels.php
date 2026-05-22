@@ -40,7 +40,7 @@ class SrtImportExistingChannels extends Command
                 'codec_video' => 'h264',
                 'codec_audio' => 'aac',
                 'enabled' => true,
-                'status' => 'active',
+                'status' => 'pending',
             ],
             [
                 'name' => 'SUDFM TV',
@@ -53,7 +53,7 @@ class SrtImportExistingChannels extends Command
                 'codec_video' => 'h264',
                 'codec_audio' => 'aac',
                 'enabled' => true,
-                'status' => 'active',
+                'status' => 'pending',
             ],
         ];
 
