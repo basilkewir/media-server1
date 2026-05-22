@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\AdminRelayServerController;
 use App\Http\Controllers\Admin\AdminIcecastController;
 use App\Http\Controllers\Admin\AdminApiTokenController;
 use App\Http\Controllers\Admin\AdminSettingsController;
+use App\Http\Controllers\Admin\SrtStreamController;
 use App\Http\Controllers\Client\DashboardController;
 use App\Http\Controllers\Client\StreamsController;
 use App\Http\Controllers\Client\LibraryController;
@@ -86,6 +87,16 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     // Settings (media server driver)
     Route::get('settings',                                  [AdminSettingsController::class, 'index'])->name('settings.index');
     Route::post('settings',                                 [AdminSettingsController::class, 'update'])->name('settings.update');
+
+    // SRT Streams
+    Route::get('srt-streams',                               [SrtStreamController::class, 'index'])->name('srt-streams.index');
+    Route::get('srt-streams/create',                        [SrtStreamController::class, 'create'])->name('srt-streams.create');
+    Route::post('srt-streams',                              [SrtStreamController::class, 'store'])->name('srt-streams.store');
+    Route::get('srt-streams/{srtStream}',                   [SrtStreamController::class, 'show'])->name('srt-streams.show');
+    Route::get('srt-streams/{srtStream}/edit',              [SrtStreamController::class, 'edit'])->name('srt-streams.edit');
+    Route::put('srt-streams/{srtStream}',                   [SrtStreamController::class, 'update'])->name('srt-streams.update');
+    Route::patch('srt-streams/{srtStream}/toggle',          [SrtStreamController::class, 'toggle'])->name('srt-streams.toggle');
+    Route::delete('srt-streams/{srtStream}',                [SrtStreamController::class, 'destroy'])->name('srt-streams.destroy');
 
     // Access Codes
     Route::get('access-codes/create',                       [AccessCodeController::class, 'create'])->name('access-codes.create');

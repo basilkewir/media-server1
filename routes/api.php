@@ -9,6 +9,7 @@ use App\Http\Controllers\API\OutputTargetController;
 use App\Http\Controllers\API\AccessCodeController;
 use App\Http\Controllers\API\RtmpWebhookController;
 use App\Http\Controllers\API\SrtWebhookController;
+use App\Http\Controllers\API\SrtStreamApiController;
 
 Route::get('/health', fn() => response()->json([
     'status' => 'ok',
@@ -86,6 +87,17 @@ Route::middleware(['auth.api', 'throttle.api'])->group(function () {
     Route::get('relay/{channel}/broadcasts',          [RelayBroadcastController::class, 'getChannelRelays']);
     Route::post('relay/{channel}/enable',             [RelayBroadcastController::class, 'enableRelay']);
     Route::post('relay/{channel}/disable',            [RelayBroadcastController::class, 'disableRelay']);
+
+    // ── SRT Stream Management ─────────────────────────────────────────────────
+    Route::get('srt-streams',                         [SrtStreamApiController::class, 'index']);
+    Route::post('srt-streams',                        [SrtStreamApiController::class, 'store']);
+    Route::get('srt-streams/next-port',               [SrtStreamApiController::class, 'nextPort']);
+    Route::get('srt-streams/{srtStream}',             [SrtStreamApiController::class, 'show']);
+    Route::put('srt-streams/{srtStream}',             [SrtStreamApiController::class, 'update']);
+    Route::patch('srt-streams/{srtStream}/toggle',    [SrtStreamApiController::class, 'toggle']);
+    Route::delete('srt-streams/{srtStream}',          [SrtStreamApiController::class, 'destroy']);
+    Route::get('srt-streams/{srtStream}/stats',       [SrtStreamApiController::class, 'stats']);
+    Route::get('srt-streams/{srtStream}/logs',        [SrtStreamApiController::class, 'logs']);
 
     // ── Access Codes ──────────────────────────────────────────────────────────
     Route::post('access-codes/validate', [AccessCodeController::class, 'validateCode']);
