@@ -8,6 +8,7 @@ use App\Http\Controllers\API\RelayBroadcastController;
 use App\Http\Controllers\API\OutputTargetController;
 use App\Http\Controllers\API\AccessCodeController;
 use App\Http\Controllers\API\RtmpWebhookController;
+use App\Http\Controllers\API\SrtWebhookController;
 
 Route::get('/health', fn() => response()->json([
     'status' => 'ok',
@@ -20,6 +21,12 @@ Route::get('/health', fn() => response()->json([
 // ── RTMP Webhooks (called by nginx-rtmp or SRS, no auth needed) ────────────
 Route::post('streams/start', [RtmpWebhookController::class, 'onPublish']);
 Route::post('streams/stop',  [RtmpWebhookController::class, 'onPublishDone']);
+
+// ── SRT Webhooks (called by vMix/OBS/FFmpeg, no auth needed) ─────────────
+Route::post('srt/connect',    [SrtWebhookController::class, 'onConnect']);
+Route::post('srt/disconnect', [SrtWebhookController::class, 'onDisconnect']);
+Route::post('srt/start',      [SrtWebhookController::class, 'startStream']);
+Route::post('srt/stop',       [SrtWebhookController::class, 'stopStream']);
 
 Route::middleware(['auth.api', 'throttle.api'])->group(function () {
 
