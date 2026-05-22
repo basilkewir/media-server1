@@ -32,14 +32,9 @@ class SrtStreamController extends Controller
      */
     public function create()
     {
-        return view('admin.srt-streams.create', [
-            'availablePort' => SrtStream::getNextAvailablePort(),
-            'codecs' => [
-                'video' => ['h264', 'h265', 'vp9'],
-                'audio' => ['aac', 'mp3', 'flac'],
-            ],
-            'resolutions' => ['720p', '1080p', '2K', '4K'],
-        ]);
+        // Dedicated create view isn't present yet; keep UI functional.
+        return redirect()->route('admin.srt-streams.index')
+            ->with('error', 'Create form view is not available yet.');
     }
 
     /**
@@ -98,14 +93,8 @@ class SrtStreamController extends Controller
      */
     public function show(SrtStream $srtStream)
     {
-        $stats = $this->getStreamStats($srtStream->id);
-        $logs = $this->getStreamLogs($srtStream->stream_id);
-
-        return view('admin.srt-streams.show', [
-            'stream' => $srtStream,
-            'stats' => $stats,
-            'logs' => $logs,
-        ]);
+    // Dedicated show view isn't present yet; keep UI functional.
+    return redirect()->route('admin.srt-streams.index');
     }
 
     /**
@@ -113,14 +102,9 @@ class SrtStreamController extends Controller
      */
     public function edit(SrtStream $srtStream)
     {
-        return view('admin.srt-streams.edit', [
-            'stream' => $srtStream,
-            'codecs' => [
-                'video' => ['h264', 'h265', 'vp9'],
-                'audio' => ['aac', 'mp3', 'flac'],
-            ],
-            'resolutions' => ['720p', '1080p', '2K', '4K'],
-        ]);
+        // Dedicated edit view isn't present yet; keep UI functional.
+        return redirect()->route('admin.srt-streams.index')
+            ->with('error', 'Edit form view is not available yet.');
     }
 
     /**
