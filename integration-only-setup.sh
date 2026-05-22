@@ -48,7 +48,7 @@ fi
 ok "MediaServer directory found"
 
 # Check if Flussonic service exists
-if ! systemctl list-unit-files | grep -q flussonic; then
+if ! systemctl list-units --all --quiet | grep -q "flussonic.service"; then
     error "Flussonic service not found. Please install Flussonic first."
 fi
 ok "Flussonic service found"
