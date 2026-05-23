@@ -31,16 +31,35 @@ apt-get update -qq
 apt-get upgrade -y -qq
 
 # ── 3. INSTALL DEPENDENCIES ──────────────────────────────────────────────────
-echo "[2/12] Installing PHP 8.3, Nginx, MySQL, Redis, FFmpeg, Supervisor..."
+echo "[2/12] Installing PHP 8.3, Nginx, MySQL, Redis, FFmpeg, Supervisor, Icecast2..."
 add-apt-repository -y ppa:ondrej/php 2>/dev/null || true
 apt-get update -qq
+
+# Preseed Icecast2 debconf answers (non-interactive)
+echo "icecast2 icecast2/icecast-setup boolean true" | debconf-set-selections
+echo "icecast2 icecast2/hostname string localhost" | debconf-set-selections
+echo "icecast2 icecast2/sourcepassword password ${MYSQL_PASS}" | debconf-set-selections
+echo "icecast2 icecast2/relaypassword password ${MYSQL_PASS}" | debconf-set-selections
+echo "icecast2 icecast2/adminpassword password ${MYSQL_PASS}" | debconf-set-selections
 
 apt-get install -y -qq \
     php8.3-fpm php8.3-cli php8.3-mysql php8.3-redis php8.3-curl \
     php8.3-mbstring php8.3-xml php8.3-zip php8.3-bcmath php8.3-intl \
     php8.3-gd php8.3-tokenizer \
-    nginx mysql-server redis-server ffmpeg supervisor git unzip curl \
+    nginx mysql-server redis-server ffmpeg supervisor git unzip curl icecast2 \
     certbot python3-certbot-nginx ufw openssl
+
+# Configure Icecast2
+mkdir -p /etc/icecast2/mounts
+chown icecast:icecast /etc/icecast2/mounts
+
+# Patch icecast.xml to include per-channel mount configs
+if ! grep -q "mounts" /etc/icecast2/icecast.xml 2>/dev/null; then
+    sed -i 's|</icecast>|    <!-- Per-channel mount configs -->\n    <include>/etc/icecast2/mounts/*.xml</include>\n</icecast>|' /etc/icecast2/icecast.xml
+fi
+
+systemctl enable icecast2
+systemctl restart icecast2
 
 # ── 4. MYSQL SETUP ───────────────────────────────────────────────────────────
 echo "[3/12] Configuring MySQL..."
@@ -110,6 +129,8 @@ ICECAST_HOST=localhost
 ICECAST_PORT=8000
 ICECAST_ADMIN_USER=admin
 ICECAST_ADMIN_PASSWORD=${MYSQL_PASS}
+ICECAST_SOURCE_PASSWORD=${MYSQL_PASS}
+ICECAST_RELAY_PASSWORD=${MYSQL_PASS}
 ICECAST_MAX_LISTENERS_PER_STREAM=1000
 ICECAST_CONF_DIR=/etc/icecast2/mounts
 
