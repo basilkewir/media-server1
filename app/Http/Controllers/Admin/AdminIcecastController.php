@@ -164,11 +164,11 @@ class AdminIcecastController extends Controller
             }
 
             if ($pid) {
-                return back()->with('success', "{$msg} (PID: {$pid})");
+                return back()->withInput()->with('success', "{$msg} (PID: {$pid})");
             }
-            return back()->with('error', 'No source available. Start the channel stream first.');
+            return back()->withInput()->with('error', 'No source available. Start the channel stream first.');
         } catch (\Exception $e) {
-            return back()->with('error', 'Forward failed: ' . $e->getMessage());
+            return back()->withInput()->with('error', 'Forward failed: ' . $e->getMessage());
         }
     }
 

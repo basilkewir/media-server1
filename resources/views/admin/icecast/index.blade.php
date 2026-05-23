@@ -172,8 +172,8 @@
             <div class="form-group" style="gap:2px;">
                 <label style="font-size:11px;">Mode</label>
                 <select name="mode" required style="font-size:12px;padding:6px 10px;">
-                    <option value="video">Video + Audio</option>
-                    <option value="audio">Audio Only</option>
+                    <option value="video" {{ old('mode') === 'audio' ? '' : 'selected' }}>Video + Audio</option>
+                    <option value="audio" {{ old('mode') === 'audio' ? 'selected' : '' }}>Audio Only</option>
                 </select>
             </div>
             <button type="submit" class="btn btn-primary btn-xs">Forward</button>
