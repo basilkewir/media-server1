@@ -671,6 +671,8 @@
         .stagger-2 { animation-delay: 0.1s; }
         .stagger-3 { animation-delay: 0.15s; }
         .stagger-4 { animation-delay: 0.2s; }
+        .stagger-5 { animation-delay: 0.25s; }
+        .stagger-6 { animation-delay: 0.3s; }
 
         /* ═══ RESPONSIVE ═══ */
         @media (max-width: 1024px) {
@@ -750,6 +752,13 @@
             @if($liveCh) <span class="nav-badge">{{ $liveCh }} live</span> @endif
         </a>
 
+        <a href="{{ route('admin.icecast.index') }}" class="nav-item {{ request()->routeIs('admin.icecast.*') ? 'active' : '' }}">
+            <span class="nav-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
+            <span class="nav-label">Icecast Radio</span>
+            @php $iceCh = \App\Models\Channel::where('is_icecast_enabled', true)->count(); @endphp
+            @if($iceCh) <span class="nav-badge">{{ $iceCh }} active</span> @endif
+        </a>
+
         <a href="{{ route('admin.srt-streams.index') }}" class="nav-item {{ request()->routeIs('admin.srt-streams.*') ? 'active' : '' }}">
             <span class="nav-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10m0-20a15.3 15.3 0 00-4 10 15.3 15.3 0 004 10"/></svg></span>
             <span class="nav-label">SRT Streams</span>
@@ -760,9 +769,9 @@
             <span class="nav-label">Outputs</span>
         </a>
 
-        <a href="{{ route('admin.relay-servers.index') }}" class="nav-item {{ request()->routeIs('admin.relay-servers.*') || request()->routeIs('admin.icecast.*') ? 'active' : '' }}">
-            <span class="nav-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
-            <span class="nav-label">Icecast & Relay</span>
+        <a href="{{ route('admin.relay-servers.index') }}" class="nav-item {{ request()->routeIs('admin.relay-servers.*') ? 'active' : '' }}">
+            <span class="nav-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></span>
+            <span class="nav-label">Relay Servers</span>
         </a>
 
         <div class="sidebar-section-label">Management</div>

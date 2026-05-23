@@ -1,11 +1,12 @@
 @extends('layouts.admin')
 @section('title', 'Relay Servers')
 @section('breadcrumb')
-    <a href="{{ route('admin.dashboard') }}">Dashboard</a> <span class="sep">/</span> Relays
+    <a href="{{ route('admin.dashboard') }}">Dashboard</a> <span class="sep">/</span> Relay Servers
 @endsection
 
 @section('topbar-actions')
     <a href="{{ route('admin.relay-servers.create') }}" class="btn btn-primary btn-sm">+ Add Server</a>
+    <a href="{{ route('admin.icecast.index') }}" class="btn btn-ghost btn-sm">Icecast Radio</a>
 @endsection
 
 @section('content')

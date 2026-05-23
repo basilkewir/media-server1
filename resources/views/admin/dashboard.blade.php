@@ -3,7 +3,7 @@
 
 @section('content')
 @php
-$stats = $stats ?? ['live' => 0, 'total' => 0, 'outputs' => 0, 'relays' => 0];
+$stats = $stats ?? ['live_channels' => 0, 'total_channels' => 0, 'icecast_enabled' => 0, 'srt_streams' => 0, 'active_outputs' => 0, 'active_relays' => 0];
 $channels = $channels ?? collect();
 $driver = $driver ?? 'ffmpeg';
 $recentEvents = $recentEvents ?? collect();
@@ -13,22 +13,32 @@ $recentEvents = $recentEvents ?? collect();
 <div class="stats-grid animate-in">
     <div class="stat-card stagger-1">
         <div class="stat-icon" style="background:var(--success-dim);"><svg fill="none" stroke="var(--success)" stroke-width="2" viewBox="0 0 24 24"><path d="M23 7l-7 5 3 9-7-5-7 5 3-9-7-5h9l4-8 4 8h9z"/></svg></div>
-        <div class="stat-value" style="color:var(--success);">{{ $stats['live'] }}</div>
+        <div class="stat-value" style="color:var(--success);">{{ $stats['live_channels'] }}</div>
         <div class="stat-label">Live Channels</div>
     </div>
     <div class="stat-card stagger-2">
-        <div class="stat-icon" style="background:var(--brand-glow);"><svg fill="none" stroke="var(--brand-light)" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></div>
-        <div class="stat-value" style="color:var(--brand-light);">{{ $stats['total'] }}</div>
-        <div class="stat-label">Total Channels</div>
+        <div class="stat-icon" style="background:#7c3aed20;"><svg fill="none" stroke="#a78bfa" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+        <div class="stat-value" style="color:#a78bfa;">{{ $stats['icecast_enabled'] }}</div>
+        <div class="stat-label">Icecast Radio</div>
     </div>
     <div class="stat-card stagger-3">
-        <div class="stat-icon" style="background:var(--info-dim);"><svg fill="none" stroke="var(--info)" stroke-width="2" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
-        <div class="stat-value" style="color:var(--info);">{{ $stats['outputs'] }}</div>
-        <div class="stat-label">Active Outputs</div>
+        <div class="stat-icon" style="background:var(--info-dim);"><svg fill="none" stroke="var(--info)" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10m0-20a15.3 15.3 0 00-4 10 15.3 15.3 0 004 10"/></svg></div>
+        <div class="stat-value" style="color:var(--info);">{{ $stats['srt_streams'] }}</div>
+        <div class="stat-label">SRT Streams</div>
     </div>
     <div class="stat-card stagger-4">
+        <div class="stat-icon" style="background:var(--brand-glow);"><svg fill="none" stroke="var(--brand-light)" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></div>
+        <div class="stat-value" style="color:var(--brand-light);">{{ $stats['total_channels'] }}</div>
+        <div class="stat-label">Total Channels</div>
+    </div>
+    <div class="stat-card stagger-5">
+        <div class="stat-icon" style="background:var(--info-dim);"><svg fill="none" stroke="var(--info)" stroke-width="2" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+        <div class="stat-value" style="color:var(--info);">{{ $stats['active_outputs'] }}</div>
+        <div class="stat-label">Active Outputs</div>
+    </div>
+    <div class="stat-card stagger-6">
         <div class="stat-icon" style="background:var(--warning-dim);"><svg fill="none" stroke="var(--warning)" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div>
-        <div class="stat-value" style="color:var(--warning);">{{ $stats['relays'] }}</div>
+        <div class="stat-value" style="color:var(--warning);">{{ $stats['active_relays'] }}</div>
         <div class="stat-label">Active Relays</div>
     </div>
 </div>

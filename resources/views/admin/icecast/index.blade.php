@@ -1,7 +1,7 @@
 @extends('layouts.admin')
-@section('title', 'Icecast & Relay Management')
+@section('title', 'Icecast Radio')
 @section('breadcrumb')
-    <a href="{{ route('admin.dashboard') }}">Dashboard</a> <span class="sep">/</span> Icecast & Relay
+    <a href="{{ route('admin.dashboard') }}">Dashboard</a> <span class="sep">/</span> Icecast Radio
 @endsection
 
 @section('topbar-actions')

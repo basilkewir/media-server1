@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Channel;
 use App\Models\OutputTarget;
 use App\Models\RelayBroadcast;
+use App\Models\SrtStream;
 use App\Models\StreamEvent;
 use Illuminate\View\View;
 
@@ -16,6 +17,8 @@ class AdminDashboardController extends Controller
         $stats = [
             'total_channels'  => Channel::count(),
             'live_channels'   => Channel::where('is_live', true)->count(),
+            'icecast_enabled' => Channel::where('is_icecast_enabled', true)->count(),
+            'srt_streams'     => SrtStream::where('enabled', true)->count(),
             'active_outputs'  => OutputTarget::whereIn('status', ['connected', 'connecting'])->count(),
             'active_relays'   => RelayBroadcast::where('is_active', true)->count(),
         ];
