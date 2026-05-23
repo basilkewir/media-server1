@@ -20,12 +20,14 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->api(prepend: [
+            \App\Http\Middleware\Cors::class,
             \App\Http\Middleware\SecurityHeaders::class,
         ]);
 
         $middleware->alias([
             'auth.api' => \App\Http\Middleware\AuthenticateApi::class,
             'throttle.api' => \App\Http\Middleware\RateLimitApi::class,
+            'webhook.secret' => \App\Http\Middleware\VerifyWebhookSecret::class,
             'access_code' => \App\Http\Middleware\RequireAccessCode::class,
             'auth' => \Illuminate\Auth\Middleware\Authenticate::class,
             'guest' => \Illuminate\Auth\Middleware\RedirectIfAuthenticated::class,

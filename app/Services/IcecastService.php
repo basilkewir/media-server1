@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Models\Channel;
@@ -66,8 +68,16 @@ XML;
 
         file_put_contents($confFile, $xml);
 
-        // Signal icecast2 to reload config if running
-        @exec('systemctl reload icecast2 2>/dev/null || true');
+        $output = null; $code = 0;
+        exec('systemctl reload icecast2 2>&1', $output, $code);
+
+        if ($code !== 0) {
+            Log::warning('Failed to reload Icecast2 config', [
+                'channel' => $channel->slug,
+                'exit_code' => $code,
+                'output' => implode("\n", $output),
+            ]);
+        }
     }
 
     public function getMountPoint(Channel $channel): ?string
@@ -78,6 +88,27 @@ XML;
     public function getPassword(Channel $channel): ?string
     {
         return $channel->metadata['icecast']['password'] ?? null;
+    }
+
+    public function getPushCredentials(Channel $channel): ?array
+    {
+        $mount    = $this->getMountPoint($channel);
+        $password = $this->getPassword($channel);
+
+        if (!$mount || !$password) {
+            return null;
+        }
+
+        $host = config('services.icecast.host', 'localhost');
+        $port = config('services.icecast.port', 8000);
+
+        return [
+            'mount_point' => $mount,
+            'password'    => $password,
+            'push_url'    => "icecast://source:{$password}@{$host}:{$port}{$mount}",
+            'host'        => $host,
+            'port'        => $port,
+        ];
     }
 
     public function getStreamUrl(Channel $channel): string

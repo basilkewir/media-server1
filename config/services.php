@@ -28,9 +28,9 @@ return [
         'host'                    => env('ICECAST_HOST', 'localhost'),
         'port'                    => env('ICECAST_PORT', 8000),
         'admin_user'              => env('ICECAST_ADMIN_USER', 'admin'),
-        'admin_password'          => env('ICECAST_ADMIN_PASSWORD', 'hackme'),
-        'source_password'         => env('ICECAST_SOURCE_PASSWORD', 'hackme'),
-        'relay_password'          => env('ICECAST_RELAY_PASSWORD', 'hackme'),
+        'admin_password'          => env('ICECAST_ADMIN_PASSWORD', ''),
+        'source_password'         => env('ICECAST_SOURCE_PASSWORD', ''),
+        'relay_password'          => env('ICECAST_RELAY_PASSWORD', ''),
         'max_listeners_per_stream'=> env('ICECAST_MAX_LISTENERS', 1000),
         'conf_dir'                => env('ICECAST_CONF_DIR', '/etc/icecast2/mounts'),
     ],
@@ -50,7 +50,7 @@ return [
     'wowza' => [
         'url'         => env('WOWZA_URL', 'http://localhost:8087'),
         'username'    => env('WOWZA_USERNAME', 'admin'),
-        'password'    => env('WOWZA_PASSWORD', 'admin'),
+        'password'    => env('WOWZA_PASSWORD', ''),
         'application' => env('WOWZA_APPLICATION', 'live'),
     ],
 
@@ -59,7 +59,12 @@ return [
     'flussonic' => [
         'url'      => env('FLUSSONIC_URL', 'http://localhost:8935'),
         'username' => env('FLUSSONIC_USERNAME', 'flussonic'),
-        'password' => env('FLUSSONIC_PASSWORD', 'letmein!'),
+        'password' => env('FLUSSONIC_PASSWORD', ''),
+    ],
+
+    // Webhook authentication secret for RTMP/SRT callbacks
+    'webhook' => [
+        'secret' => env('WEBHOOK_SECRET', ''),
     ],
 
 ];

@@ -36,10 +36,11 @@ class IcecastController extends Controller
 
             return $this->success(
                 data: [
-                    'channel_id' => $channel->id,
+                    'channel_id'  => $channel->id,
                     'mount_point' => $result['mount_point'],
-                    'stream_url' => $result['stream_url'],
-                    'push_url' => "icecast://{$result['mount_point']}",
+                    'password'    => $result['password'],
+                    'stream_url'  => $result['stream_url'],
+                    'source_url'  => $result['source_url'],
                 ],
                 message: 'Icecast stream created successfully.',
                 statusCode: 201
@@ -125,10 +126,17 @@ class IcecastController extends Controller
     {
         try {
             $channel->update(['is_icecast_enabled' => true]);
-            $this->icecastService->createIcecastStream($channel);
+            $result = $this->icecastService->createIcecastStream($channel);
 
             return $this->success(
-                data: ['id' => $channel->id, 'is_icecast_enabled' => true],
+                data: [
+                    'id'          => $channel->id,
+                    'is_icecast_enabled' => true,
+                    'mount_point' => $result['mount_point'] ?? null,
+                    'password'    => $result['password'] ?? null,
+                    'stream_url'  => $result['stream_url'] ?? null,
+                    'source_url'  => $result['source_url'] ?? null,
+                ],
                 message: 'Icecast enabled for channel successfully.'
             );
         } catch (\Exception $e) {

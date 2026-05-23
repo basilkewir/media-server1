@@ -1,70 +1,56 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\API;
 
 use App\Models\SrtStream;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Http\Controllers\Controller;
+use App\Traits\ApiResponse;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\Process\Process;
 
-/**
- * API for SRT Stream Management
- * Provides endpoints for creating, managing, and monitoring SRT streams
- */
 class SrtStreamApiController extends Controller
 {
-    /**
-     * Get all SRT streams with status
-     */
+    use ApiResponse;
+
     public function index(): JsonResponse
     {
         try {
             $streams = SrtStream::all();
 
-            return response()->json([
-                'success' => true,
-                'data' => $streams->map(fn($s) => $this->formatStream($s)),
-                'total' => $streams->count(),
-            ]);
+            return $this->success(
+                data: $streams->map(fn($s) => $this->formatStream($s)),
+                message: 'SRT streams retrieved successfully.',
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->serverError($e->getMessage(), 'SRT_INDEX_FAILED');
         }
     }
 
-    /**
-     * Get specific stream details
-     */
     public function show(SrtStream $stream): JsonResponse
     {
         try {
-            return response()->json([
-                'success' => true,
-                'data' => $this->formatStream($stream),
-            ]);
+            return $this->success(
+                data: $this->formatStream($stream),
+                message: 'SRT stream retrieved successfully.',
+            );
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->serverError($e->getMessage(), 'SRT_SHOW_FAILED');
         }
     }
 
-    /**
-     * Create new SRT stream
-     */
     public function store(Request $request): JsonResponse
     {
         try {
             $validated = $request->validate([
-                'name' => 'required|string|unique:srt_streams,name|max:255',
+                'name'        => 'required|string|unique:srt_streams,name|max:255',
                 'rtmp_stream' => 'required|string|unique:srt_streams,rtmp_stream|max:255',
                 'description' => 'nullable|string|max:1000',
-                'bitrate' => 'nullable|integer|min:100|max:50000',
-                'resolution' => 'nullable|string',
+                'bitrate'     => 'nullable|integer|min:100|max:50000',
+                'resolution'  => 'nullable|string',
                 'codec_video' => 'nullable|string',
                 'codec_audio' => 'nullable|string',
             ]);
@@ -81,127 +67,92 @@ class SrtStreamApiController extends Controller
             $stream->codec_audio = $validated['codec_audio'] ?? 'aac';
             $stream->enabled = true;
             $stream->status = 'pending';
-
             $stream->save();
 
-            // Create Flussonic stream and update SRT config
-            shell_exec("cd /var/www/mediaserver && php artisan srt:create-stream {$stream->id} 2>&1");
+            $this->runArtisanCommand("srt:create-stream {$stream->id}");
 
             Log::info("SRT Stream created via API: {$stream->name} on port {$stream->srt_port}");
 
-            return response()->json([
-                'success' => true,
-                'message' => "Stream '{$stream->name}' created on port {$stream->srt_port}",
-                'data' => $this->formatStream($stream),
-            ], 201);
+            return $this->success(
+                data: $this->formatStream($stream),
+                message: "Stream '{$stream->name}' created on port {$stream->srt_port}",
+                statusCode: 201
+            );
         } catch (\Exception $e) {
             Log::error("Error creating SRT stream: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'error' => $e->getMessage(),
-            ], 400);
+            return $this->serverError($e->getMessage(), 'SRT_CREATE_FAILED');
         }
     }
 
-    /**
-     * Update SRT stream
-     */
     public function update(Request $request, SrtStream $stream): JsonResponse
     {
         try {
             $validated = $request->validate([
-                'name' => "required|string|unique:srt_streams,name,{$stream->id}|max:255",
+                'name'        => "required|string|unique:srt_streams,name,{$stream->id}|max:255",
                 'description' => 'nullable|string|max:1000',
-                'bitrate' => 'nullable|integer|min:100|max:50000',
-                'resolution' => 'nullable|string',
+                'bitrate'     => 'nullable|integer|min:100|max:50000',
+                'resolution'  => 'nullable|string',
                 'codec_video' => 'nullable|string',
                 'codec_audio' => 'nullable|string',
             ]);
 
             $stream->update($validated);
-
-            // Update SRT config
-            shell_exec("pkill -USR1 srt-daemon 2>/dev/null || true");
+            $this->signalDaemonReload();
 
             Log::info("SRT Stream updated via API: {$stream->name}");
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Stream updated successfully',
-                'data' => $this->formatStream($stream),
-            ]);
+            return $this->success(
+                data: $this->formatStream($stream),
+                message: 'Stream updated successfully',
+            );
         } catch (\Exception $e) {
             Log::error("Error updating SRT stream: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'error' => $e->getMessage(),
-            ], 400);
+            return $this->serverError($e->getMessage(), 'SRT_UPDATE_FAILED');
         }
     }
 
-    /**
-     * Toggle stream enabled/disabled
-     */
     public function toggle(SrtStream $stream): JsonResponse
     {
         try {
             $stream->enabled = !$stream->enabled;
             $stream->save();
 
-            // Signal daemon to reload
-            shell_exec("pkill -USR1 srt-daemon 2>/dev/null || true");
+            $this->signalDaemonReload();
 
             $status = $stream->enabled ? 'enabled' : 'disabled';
             Log::info("SRT Stream toggled via API: {$stream->name} is now {$status}");
 
-            return response()->json([
-                'success' => true,
-                'message' => "Stream {$status} successfully",
-                'data' => $this->formatStream($stream),
-            ]);
+            return $this->success(
+                data: $this->formatStream($stream),
+                message: "Stream {$status} successfully",
+            );
         } catch (\Exception $e) {
             Log::error("Error toggling SRT stream: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'error' => $e->getMessage(),
-            ], 400);
+            return $this->serverError($e->getMessage(), 'SRT_TOGGLE_FAILED');
         }
     }
 
-    /**
-     * Delete SRT stream
-     */
     public function destroy(SrtStream $stream): JsonResponse
     {
         try {
             $name = $stream->name;
             $port = $stream->srt_port;
 
-            // Delete via artisan command
-            shell_exec("cd /var/www/mediaserver && php artisan srt:delete-stream {$stream->id} 2>&1");
+            $this->runArtisanCommand("srt:delete-stream {$stream->id}");
 
             Log::info("SRT Stream deleted via API: {$name} (port {$port})");
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Stream deleted successfully',
-            ]);
+            return $this->success(message: 'Stream deleted successfully');
         } catch (\Exception $e) {
             Log::error("Error deleting SRT stream: " . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'error' => $e->getMessage(),
-            ], 400);
+            return $this->serverError($e->getMessage(), 'SRT_DELETE_FAILED');
         }
     }
 
-    /**
-     * Get stream statistics
-     */
     public function stats(SrtStream $stream): JsonResponse
     {
         try {
-            $logPath = '/var/www/mediaserver/storage/logs/srt-server.log';
+            $logPath = storage_path('logs/srt-server.log');
             $stats = ['bitrate' => 'N/A', 'speed' => 'N/A', 'status' => $stream->status];
 
             if (file_exists($logPath)) {
@@ -214,26 +165,17 @@ class SrtStreamApiController extends Controller
                 }
             }
 
-            return response()->json([
-                'success' => true,
-                'data' => $stats,
-            ]);
+            return $this->success(data: $stats, message: 'SRT stream stats retrieved.');
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->serverError($e->getMessage(), 'SRT_STATS_FAILED');
         }
     }
 
-    /**
-     * Get stream logs
-     */
     public function logs(SrtStream $stream, Request $request): JsonResponse
     {
         try {
             $lines = $request->get('lines', 50);
-            $logPath = '/var/www/mediaserver/storage/logs/srt-server.log';
+            $logPath = storage_path('logs/srt-server.log');
 
             $logs = [];
             if (file_exists($logPath)) {
@@ -250,63 +192,73 @@ class SrtStreamApiController extends Controller
                 $logs = array_slice($allLines, -$lines);
             }
 
-            return response()->json([
-                'success' => true,
-                'data' => $logs,
-                'total' => count($logs),
-            ]);
+            return $this->success(data: $logs, message: 'SRT logs retrieved.');
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->serverError($e->getMessage(), 'SRT_LOGS_FAILED');
         }
     }
 
-    /**
-     * Get recommended next port
-     */
     public function nextPort(): JsonResponse
     {
         try {
             $port = SrtStream::getNextAvailablePort();
 
-            return response()->json([
-                'success' => true,
-                'port' => $port,
-            ]);
+            return $this->success(data: ['port' => $port], message: 'Next port retrieved.');
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'error' => $e->getMessage(),
-            ], 500);
+            return $this->serverError($e->getMessage(), 'SRT_PORT_FAILED');
         }
     }
 
-    /**
-     * Format stream response
-     */
+    private function runArtisanCommand(string $args): void
+    {
+        $basePath = base_path();
+        $php = PHP_BINARY ?: 'php';
+
+        $process = new Process([$php, 'artisan', ...explode(' ', $args)]);
+        $process->setWorkingDirectory($basePath);
+        $process->setTimeout(30);
+        $process->run();
+
+        if (!$process->isSuccessful()) {
+            Log::warning("Artisan command failed", [
+                'command' => $args,
+                'error' => $process->getErrorOutput(),
+            ]);
+        }
+    }
+
+    private function signalDaemonReload(): void
+    {
+        $process = new Process(['pkill', '-USR1', 'srt-daemon']);
+        $process->setTimeout(5);
+        $process->run();
+    }
+
     private function formatStream(SrtStream $stream): array
     {
+        $serverHost = config('app.url')
+            ? parse_url(config('app.url'), PHP_URL_HOST)
+            : 'localhost';
+
         return [
-            'id' => $stream->id,
-            'name' => $stream->name,
-            'stream_id' => $stream->stream_id,
-            'srt_port' => $stream->srt_port,
-            'rtmp_stream' => $stream->rtmp_stream,
-            'description' => $stream->description,
-            'enabled' => $stream->enabled,
-            'bitrate' => $stream->bitrate,
+            'id'         => $stream->id,
+            'name'       => $stream->name,
+            'stream_id'  => $stream->stream_id,
+            'srt_port'   => $stream->srt_port,
+            'rtmp_stream'=> $stream->rtmp_stream,
+            'description'=> $stream->description,
+            'enabled'    => $stream->enabled,
+            'bitrate'    => $stream->bitrate,
             'resolution' => $stream->resolution,
-            'codec_video' => $stream->codec_video,
-            'codec_audio' => $stream->codec_audio,
-            'status' => $stream->status,
+            'codec_video'=> $stream->codec_video,
+            'codec_audio'=> $stream->codec_audio,
+            'status'     => $stream->status,
             'last_connected_at' => $stream->last_connected_at,
-            'error_log' => $stream->error_log,
-            'srt_url' => "srt://" . config('app.server_ip', 'server') . ":{$stream->srt_port}?streamid={$stream->stream_id}",
-            'rtmp_url' => "rtmp://127.0.0.1:1935/{$stream->rtmp_stream}",
-            'hls_url' => "http://" . config('app.server_ip', 'server') . "/{$stream->rtmp_stream}/index.m3u8",
-            'dash_url' => "http://" . config('app.server_ip', 'server') . "/{$stream->rtmp_stream}/manifest.mpd",
+            'error_log'  => $stream->error_log,
+            'srt_url'    => "srt://{$serverHost}:{$stream->srt_port}?streamid={$stream->stream_id}",
+            'rtmp_url'   => "rtmp://127.0.0.1:1935/{$stream->rtmp_stream}",
+            'hls_url'    => "http://{$serverHost}/{$stream->rtmp_stream}/index.m3u8",
+            'dash_url'   => "http://{$serverHost}/{$stream->rtmp_stream}/manifest.mpd",
         ];
     }
 }

@@ -240,30 +240,40 @@ class OutputTargetController extends Controller
         );
     }
 
-    public function globalStatus(): JsonResponse
+    public function globalStatus(Request $request): JsonResponse
     {
+        $perPage = min((int) $request->integer('per_page', 50), 200);
+
         $targets = OutputTarget::with('channel:id,name,slug')
             ->where('is_enabled', true)
             ->orderBy('channel_id')
-            ->get();
+            ->paginate($perPage);
 
-        $summary = [
-            'total'        => $targets->count(),
-            'connected'    => $targets->where('status', 'connected')->count(),
-            'connecting'   => $targets->where('status', 'connecting')->count(),
-            'reconnecting' => $targets->where('status', 'reconnecting')->count(),
-            'error'        => $targets->where('status', 'error')->count(),
-            'stopped'      => $targets->where('status', 'stopped')->count(),
-            'passthrough'  => $targets->where('is_passthrough', true)->count(),
-            'transcoding'  => $targets->where('is_passthrough', false)->count(),
-        ];
+        $summary = OutputTarget::where('is_enabled', true)
+            ->selectRaw("
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'connected' THEN 1 ELSE 0 END) as connected,
+                SUM(CASE WHEN status = 'connecting' THEN 1 ELSE 0 END) as connecting,
+                SUM(CASE WHEN status = 'reconnecting' THEN 1 ELSE 0 END) as reconnecting,
+                SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as error,
+                SUM(CASE WHEN status = 'stopped' THEN 1 ELSE 0 END) as stopped,
+                SUM(CASE WHEN is_passthrough = 1 THEN 1 ELSE 0 END) as passthrough,
+                SUM(CASE WHEN is_passthrough = 0 THEN 1 ELSE 0 END) as transcoding
+            ")
+            ->first();
 
         return $this->success(
             data: [
-                'summary' => $summary,
+                'summary' => $summary->toArray(),
                 'targets' => OutputTargetResource::collection($targets),
             ],
-            message: 'Global output status retrieved successfully.'
+            message: 'Global output status retrieved successfully.',
+            meta: [
+                'current_page' => $targets->currentPage(),
+                'last_page'    => $targets->lastPage(),
+                'per_page'     => $targets->perPage(),
+                'total'        => $targets->total(),
+            ],
         );
     }
 

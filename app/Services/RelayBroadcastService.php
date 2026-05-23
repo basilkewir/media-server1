@@ -8,6 +8,7 @@ use App\Models\Channel;
 use App\Models\RelayServer;
 use App\Models\RelayBroadcast;
 use App\Models\RelayBroadcastLog;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\Process\Process;
 use Exception;
@@ -25,24 +26,37 @@ class RelayBroadcastService
             $this->stopRelay($existing);
         }
 
-        $relay = RelayBroadcast::create([
-            'channel_id'      => $channel->id,
-            'relay_server_id' => $relayServer->id,
-            'status'          => 'connecting',
-            'is_active'       => true,
-            'bitrate_kbps'    => $channel->bitrate_kbps ?? 128,
-        ]);
+        return DB::transaction(function () use ($channel, $relayServer) {
+            $relay = RelayBroadcast::create([
+                'channel_id'      => $channel->id,
+                'relay_server_id' => $relayServer->id,
+                'status'          => 'connecting',
+                'is_active'       => true,
+                'bitrate_kbps'    => $channel->bitrate_kbps ?? 128,
+            ]);
 
-        $this->startRelayProcess($channel, $relayServer, $relay);
+            try {
+                $this->startRelayProcess($channel, $relayServer, $relay);
+            } catch (\Exception $e) {
+                $relay->update(['status' => 'error', 'is_active' => false]);
+                RelayBroadcastLog::create([
+                    'relay_broadcast_id' => $relay->id,
+                    'event_type'         => 'relay_failed',
+                    'message'            => "Failed to start relay: {$e->getMessage()}",
+                    'status'             => 'error',
+                ]);
+                throw $e;
+            }
 
-        RelayBroadcastLog::create([
-            'relay_broadcast_id' => $relay->id,
-            'event_type'         => 'relay_started',
-            'message'            => "Relay started to {$relayServer->name}",
-            'status'             => 'success',
-        ]);
+            RelayBroadcastLog::create([
+                'relay_broadcast_id' => $relay->id,
+                'event_type'         => 'relay_started',
+                'message'            => "Relay started to {$relayServer->name}",
+                'status'             => 'success',
+            ]);
 
-        return $relay->fresh();
+            return $relay->fresh();
+        });
     }
 
     protected function startRelayProcess(Channel $channel, RelayServer $relayServer, RelayBroadcast $relay): void
@@ -125,10 +139,15 @@ class RelayBroadcastService
                 }
             } else {
                 $safePid = escapeshellarg((string) $pid);
-                @exec("kill -15 {$safePid} 2>/dev/null");
+                $output = null; $code = 0;
+                exec("kill -15 {$safePid} 2>&1", $output, $code);
+                if ($code !== 0) {
+                    Log::warning('Failed to send SIGTERM to relay process', ['pid' => $pid]);
+                }
                 usleep(300000);
                 if (file_exists("/proc/{$pid}")) {
-                    @exec("kill -9 {$safePid} 2>/dev/null");
+                    exec("kill -9 {$safePid} 2>&1");
+                    Log::warning('Force-killed unresponsive relay process', ['pid' => $pid]);
                 }
             }
         }

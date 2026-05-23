@@ -5,6 +5,7 @@
 @endsection
 
 @section('topbar-actions')
+    <button class="btn btn-primary btn-sm" onclick="openModal('createRadioModal')">Create Radio Stream</button>
     <a href="{{ route('admin.relay-servers.index') }}" class="btn btn-ghost btn-sm">Relay Servers</a>
     <a href="{{ route('admin.outputs.index') }}" class="btn btn-ghost btn-sm">Output Targets</a>
 @endsection
@@ -64,7 +65,7 @@
     </div>
 
     @if($ch->is_icecast_enabled)
-    <div style="display:grid; grid-template-columns: 1.5fr 1fr; gap:16px;">
+    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px;">
         {{-- Icecast Stats --}}
         <div style="background:var(--surface-2);border-radius:var(--radius);padding:14px;">
             <div style="font-weight:600;font-size:13px;margin-bottom:8px;">Icecast Stream</div>
@@ -87,6 +88,29 @@
                 <a href="{{ $item['stream_url'] }}" target="_blank" style="font-size:12px;">{{ $item['stream_url'] }}</a>
             </div>
         </div>
+
+        {{-- Push Credentials --}}
+        @if($item['credentials'])
+        <div style="background:var(--surface-2);border-radius:var(--radius);padding:14px;">
+            <div style="font-weight:600;font-size:13px;margin-bottom:8px;">Push Credentials</div>
+            <div style="display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:12.5px;">
+                <span style="color:var(--text-tertiary);">Host:</span>
+                <code style="font-family:var(--font-mono);">{{ $item['credentials']['host'] }}:{{ $item['credentials']['port'] }}</code>
+                <span style="color:var(--text-tertiary);">Mount:</span>
+                <code style="font-family:var(--font-mono);">{{ $item['credentials']['mount_point'] }}</code>
+                <span style="color:var(--text-tertiary);">Password:</span>
+                <code id="pwd-{{ $ch->id }}" style="font-family:var(--font-mono);background:var(--surface-1);padding:2px 6px;border-radius:4px;">{{ $item['credentials']['password'] }}</code>
+                <span colspan="2">
+                    <button type="button" class="btn btn-xs btn-ghost" onclick="copyToClipboard('pwd-{{ $ch->id }}')" style="font-size:11px;">Copy</button>
+                </span>
+                <span style="color:var(--text-tertiary);">Push URL:</span>
+                <code id="push-{{ $ch->id }}" style="font-family:var(--font-mono);font-size:11px;word-break:break-all;">{{ $item['credentials']['push_url'] }}</code>
+                <span colspan="2">
+                    <button type="button" class="btn btn-xs btn-ghost" onclick="copyToClipboard('push-{{ $ch->id }}')" style="font-size:11px;">Copy</button>
+                </span>
+            </div>
+        </div>
+        @endif
 
         {{-- Audio Relay Config --}}
         <div style="background:var(--surface-2);border-radius:var(--radius);padding:14px;">
@@ -161,4 +185,81 @@
     @endif
 </div>
 @endforeach
+
+{{-- Create Radio Stream Modal --}}
+<div class="modal-overlay" id="createRadioModal" style="display:none;">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">Create Radio Stream</div>
+            <button class="modal-close" onclick="closeModal('createRadioModal')">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <form method="POST" action="{{ route('admin.icecast.create-stream') }}">
+            @csrf
+            <div class="form-group" style="margin-bottom:12px;">
+                <label>Channel Name</label>
+                <input name="name" id="radio-name" placeholder="My Radio Station" required>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label>Slug</label>
+                <input name="slug" id="radio-slug" placeholder="my-radio-station" required data-touched="false">
+                <span class="hint">Used in the stream mount point: /stream/<code>slug</code></span>
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label>Description (optional)</label>
+                <input name="description" placeholder="24/7 radio stream">
+            </div>
+            <div class="form-group" style="margin-bottom:12px;">
+                <label>Bitrate (kbps)</label>
+                <input type="number" name="bitrate_kbps" value="128" min="16" max="512" style="width:100px;">
+                <span class="hint">Audio quality: 128 kbps is standard for MP3 radio</span>
+            </div>
+            <div class="form-group" style="margin-bottom:16px;">
+                <label>VOD Playlist URL (optional)</label>
+                <input name="vod_playlist_url" placeholder="https://example.com/playlist.m3u8">
+                <span class="hint">Audio fallback playlist when no live source is pushing</span>
+            </div>
+            <p style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;padding:8px;background:var(--surface-2);border-radius:var(--radius-sm);">
+                Icecast runs locally on <code style="font-family:var(--font-mono);">localhost:{{ $icecastPort }}</code>. Push credentials will be shown after creation.
+            </p>
+            <button type="submit" class="btn btn-primary">Create Radio Stream</button>
+        </form>
+    </div>
+</div>
+
 @endsection
+
+@push('scripts')
+<script>
+(function() {
+    var nameEl = document.getElementById('radio-name');
+    var slugEl = document.getElementById('radio-slug');
+    if (!nameEl || !slugEl) return;
+    function slugify(text) {
+        return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    }
+    nameEl.addEventListener('input', function() {
+        if (slugEl.dataset.touched === 'false') {
+            slugEl.value = slugify(this.value);
+        }
+    });
+    slugEl.addEventListener('input', function() {
+        slugEl.dataset.touched = 'true';
+    });
+})();
+
+function copyToClipboard(elementId) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    navigator.clipboard.writeText(el.textContent).then(function() {
+        var btn = el.parentElement.nextElementSibling;
+        if (btn) {
+            var orig = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(function() { btn.textContent = orig; }, 1500);
+        }
+    });
+}
+</script>
+@endpush

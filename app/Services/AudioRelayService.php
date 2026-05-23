@@ -318,10 +318,16 @@ class AudioRelayService
             }
         } else {
             $safePid = escapeshellarg((string) $pid);
-            @exec("kill -15 {$safePid} 2>/dev/null");
+            $output = null; $code = 0;
+            exec("kill -15 {$safePid} 2>&1", $output, $code);
+            if ($code !== 0) {
+                Log::warning('Failed to send SIGTERM to process', ['pid' => $pid]);
+            }
             usleep(500000);
             if (file_exists("/proc/{$pid}")) {
-                @exec("kill -9 {$safePid} 2>/dev/null");
+                $output2 = null; $code2 = 0;
+                exec("kill -9 {$safePid} 2>&1", $output2, $code2);
+                Log::warning('Force-killed unresponsive process', ['pid' => $pid]);
             }
         }
     }

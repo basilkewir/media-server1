@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 class ProtocolDetector
@@ -145,7 +147,7 @@ class ProtocolDetector
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_NOBODY         => true,
             CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYPEER => !app()->environment('local'),
         ]);
         curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);

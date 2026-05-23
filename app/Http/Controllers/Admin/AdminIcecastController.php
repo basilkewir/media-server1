@@ -20,20 +20,51 @@ class AdminIcecastController extends Controller
         protected RelayBroadcastService $relayService,
     ) {}
 
+    public function createStream(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name'            => 'required|string|max:255|unique:channels,name',
+            'slug'            => 'required|string|max:255|unique:channels,slug|regex:/^[a-z0-9\-]+$/',
+            'description'     => 'nullable|string|max:1000',
+            'bitrate_kbps'    => 'nullable|integer|min:16|max:512',
+            'vod_playlist_url'=> 'nullable|url|max:2048',
+        ]);
+
+        $channel = Channel::create([
+            'name'              => $validated['name'],
+            'slug'              => $validated['slug'],
+            'description'       => $validated['description'] ?? '',
+            'bitrate_kbps'      => $validated['bitrate_kbps'] ?? 128,
+            'vod_playlist_url'  => $validated['vod_playlist_url'] ?? null,
+            'is_active'         => true,
+            'is_icecast_enabled'=> false,
+        ]);
+
+        $result = $this->icecast->createIcecastStream($channel);
+
+        if (!$result['success']) {
+            return back()->with('error', 'Channel created but Icecast setup failed: ' . ($result['error'] ?? 'Unknown error'));
+        }
+
+        return back()->with('success', "Radio stream '{$channel->name}' created. Mount: {$result['mount_point']} — Push URL: {$result['source_url']}");
+    }
+
     public function index(): View
     {
         $channels = Channel::where('is_active', true)->orderBy('name')->get()->map(function ($ch) {
             $icecastStats = $ch->is_icecast_enabled ? $this->icecast->getStreamStats($ch) : [];
             $audioInfo    = $this->audioRelay->getAudioRelayInfo($ch);
+            $credentials  = $ch->is_icecast_enabled ? $this->icecast->getPushCredentials($ch) : null;
 
             return [
-                'channel'      => $ch,
-                'enabled'      => $ch->is_icecast_enabled,
-                'mount'        => $this->icecast->getMountPoint($ch),
-                'stream_url'   => $ch->is_icecast_enabled ? $this->icecast->getStreamUrl($ch) : null,
-                'icecast_stats'=> $icecastStats,
-                'audio_relay'  => $audioInfo,
+                'channel'       => $ch,
+                'enabled'       => $ch->is_icecast_enabled,
+                'mount'         => $this->icecast->getMountPoint($ch),
+                'stream_url'    => $ch->is_icecast_enabled ? $this->icecast->getStreamUrl($ch) : null,
+                'icecast_stats' => $icecastStats,
+                'audio_relay'   => $audioInfo,
                 'audio_fallback'=> $ch->audio_fallback_enabled,
+                'credentials'   => $credentials,
             ];
         });
 
@@ -52,7 +83,7 @@ class AdminIcecastController extends Controller
             return back()->with('error', 'Failed to enable Icecast: ' . ($result['error'] ?? 'Unknown error'));
         }
 
-        return back()->with('success', "Icecast enabled. Mount: {$result['mount_point']}");
+        return back()->with('success', "Icecast enabled. Mount: {$result['mount_point']} — Push URL: {$result['source_url']}");
     }
 
     public function disable(Channel $channel): RedirectResponse

@@ -11,23 +11,73 @@ use App\Http\Controllers\API\RtmpWebhookController;
 use App\Http\Controllers\API\SrtWebhookController;
 use App\Http\Controllers\API\SrtStreamApiController;
 
-Route::get('/health', fn() => response()->json([
-    'status' => 'ok',
-    'service' => 'MediaServer',
-    'version' => config('app.version', '1.1.0'),
-    'timestamp' => now()->toIso8601String(),
-    'environment' => app()->environment(),
-]));
+Route::get('/health', function () {
+    $checks = [
+        'database'  => 'ok',
+        'redis'     => 'ok',
+        'disk'      => 'ok',
+        'icecast'   => 'unknown',
+        'ffmpeg'    => 'ok',
+    ];
 
-// ── RTMP Webhooks (called by nginx-rtmp or SRS, no auth needed) ────────────
-Route::post('streams/start', [RtmpWebhookController::class, 'onPublish']);
-Route::post('streams/stop',  [RtmpWebhookController::class, 'onPublishDone']);
+    try {
+        \Illuminate\Support\Facades\DB::connection()->getPdo();
+    } catch (\Exception $e) {
+        $checks['database'] = 'error: ' . $e->getMessage();
+    }
 
-// ── SRT Webhooks (called by vMix/OBS/FFmpeg, no auth needed) ─────────────
-Route::post('srt/connect',    [SrtWebhookController::class, 'onConnect']);
-Route::post('srt/disconnect', [SrtWebhookController::class, 'onDisconnect']);
-Route::post('srt/start',      [SrtWebhookController::class, 'startStream']);
-Route::post('srt/stop',       [SrtWebhookController::class, 'stopStream']);
+    try {
+        \Illuminate\Support\Facades\Redis::connection()->ping();
+    } catch (\Exception $e) {
+        $checks['redis'] = 'error: ' . $e->getMessage();
+    }
+
+    $diskFree = disk_free_space(storage_path());
+    if ($diskFree === false || $diskFree < 100 * 1024 * 1024) {
+        $checks['disk'] = $diskFree === false ? 'error' : sprintf('low: %.0f MB free', $diskFree / 1024 / 1024);
+    }
+
+    $icecastHost = config('services.icecast.host', 'localhost');
+    $icecastPort = config('services.icecast.port', 8000);
+    $sock = @fsockopen($icecastHost, $icecastPort, $errno, $errstr, 2);
+    if ($sock) {
+        fclose($sock);
+        $checks['icecast'] = 'reachable';
+    } else {
+        $checks['icecast'] = 'unreachable';
+    }
+
+    exec(config('services.ffmpeg.path', 'ffmpeg') . ' -version 2>&1', $ffOut, $ffCode);
+    if ($ffCode !== 0) {
+        $checks['ffmpeg'] = 'error: not found';
+    }
+
+    $allOk = collect($checks)->every(fn($v) => !str_starts_with($v, 'error'));
+    $statusCode = $allOk ? 200 : 503;
+
+    return response()->json([
+        'status'    => $allOk ? 'ok' : 'degraded',
+        'service'   => 'MediaServer',
+        'version'   => config('app.version', '1.1.0'),
+        'timestamp' => now()->toIso8601String(),
+        'environment' => app()->environment(),
+        'checks'    => $checks,
+    ], $statusCode);
+});
+
+// ── RTMP Webhooks (called by nginx-rtmp or SRS) ──────────────────────
+Route::middleware(['webhook.secret', 'throttle:stream_start'])->group(function () {
+    Route::post('streams/start', [RtmpWebhookController::class, 'onPublish']);
+    Route::post('streams/stop',  [RtmpWebhookController::class, 'onPublishDone']);
+});
+
+// ── SRT Webhooks (called by vMix/OBS/FFmpeg) ─────────────────────────
+Route::middleware(['webhook.secret', 'throttle:stream_start'])->group(function () {
+    Route::post('srt/connect',    [SrtWebhookController::class, 'onConnect']);
+    Route::post('srt/disconnect', [SrtWebhookController::class, 'onDisconnect']);
+    Route::post('srt/start',      [SrtWebhookController::class, 'startStream']);
+    Route::post('srt/stop',       [SrtWebhookController::class, 'stopStream']);
+});
 
 Route::middleware(['auth.api', 'throttle.api'])->group(function () {
 

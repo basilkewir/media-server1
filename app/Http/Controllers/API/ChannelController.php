@@ -18,15 +18,23 @@ class ChannelController extends Controller
 {
     use ApiResponse;
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $perPage = min((int) $request->integer('per_page', 50), 200);
+
         $channels = Channel::with(['streams' => fn($q) => $q->latest()->limit(1)])
             ->orderBy('name')
-            ->get();
+            ->paginate($perPage);
 
         return $this->success(
             data: ChannelResource::collection($channels),
-            message: 'Channels retrieved successfully.'
+            message: 'Channels retrieved successfully.',
+            meta: [
+                'current_page' => $channels->currentPage(),
+                'last_page'    => $channels->lastPage(),
+                'per_page'     => $channels->perPage(),
+                'total'        => $channels->total(),
+            ],
         );
     }
 

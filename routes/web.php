@@ -106,6 +106,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
 
     // Icecast
     Route::get('icecast',                                   [AdminIcecastController::class, 'index'])->name('icecast.index');
+    Route::post('icecast/create-stream',                    [AdminIcecastController::class, 'createStream'])->name('icecast.create-stream');
     Route::post('icecast/{channel}/enable',                 [AdminIcecastController::class, 'enable'])->name('icecast.enable');
     Route::post('icecast/{channel}/disable',                [AdminIcecastController::class, 'disable'])->name('icecast.disable');
     Route::post('icecast/{channel}/audio-relay/start',      [AdminIcecastController::class, 'startAudioRelay'])->name('icecast.audio-relay.start');
