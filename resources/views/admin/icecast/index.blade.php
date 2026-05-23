@@ -98,14 +98,18 @@
                 <code style="font-family:var(--font-mono);">{{ $item['credentials']['host'] }}:{{ $item['credentials']['port'] }}</code>
                 <span style="color:var(--text-tertiary);">Mount:</span>
                 <code style="font-family:var(--font-mono);">{{ $item['credentials']['mount_point'] }}</code>
+                <span style="color:var(--text-tertiary);">Username:</span>
+                <code style="font-family:var(--font-mono);background:var(--surface-1);padding:2px 6px;border-radius:4px;">source</code>
                 <span style="color:var(--text-tertiary);">Password:</span>
                 <code id="pwd-{{ $ch->id }}" style="font-family:var(--font-mono);background:var(--surface-1);padding:2px 6px;border-radius:4px;">{{ $item['credentials']['password'] }}</code>
-                <span colspan="2">
+                <span></span>
+                <span>
                     <button type="button" class="btn btn-xs btn-ghost" onclick="copyToClipboard('pwd-{{ $ch->id }}')" style="font-size:11px;">Copy</button>
                 </span>
                 <span style="color:var(--text-tertiary);">Push URL:</span>
                 <code id="push-{{ $ch->id }}" style="font-family:var(--font-mono);font-size:11px;word-break:break-all;">{{ $item['credentials']['push_url'] }}</code>
-                <span colspan="2">
+                <span></span>
+                <span>
                     <button type="button" class="btn btn-xs btn-ghost" onclick="copyToClipboard('push-{{ $ch->id }}')" style="font-size:11px;">Copy</button>
                 </span>
             </div>
