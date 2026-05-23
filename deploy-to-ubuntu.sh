@@ -51,15 +51,15 @@ apt-get install -y -qq \
 
 # Configure Icecast2
 mkdir -p /etc/icecast2/mounts
-chown icecast:icecast /etc/icecast2/mounts
+chown icecast:icecast /etc/icecast2/mounts 2>/dev/null || chown root:root /etc/icecast2/mounts
 
 # Patch icecast.xml to include per-channel mount configs
 if ! grep -q "mounts" /etc/icecast2/icecast.xml 2>/dev/null; then
-    sed -i 's|</icecast>|    <!-- Per-channel mount configs -->\n    <include>/etc/icecast2/mounts/*.xml</include>\n</icecast>|' /etc/icecast2/icecast.xml
+    sed -i 's|</icecast>|    <!-- Per-channel mount configs -->\n    <include>/etc/icecast2/mounts/*.xml</include>\n</icecast>|' /etc/icecast2/icecast.xml 2>/dev/null || true
 fi
 
-systemctl enable icecast2
-systemctl restart icecast2
+systemctl enable icecast2 2>/dev/null || true
+systemctl restart icecast2 2>/dev/null || true
 
 # ── 4. MYSQL SETUP ───────────────────────────────────────────────────────────
 echo "[3/12] Configuring MySQL..."
