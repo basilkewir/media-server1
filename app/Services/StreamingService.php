@@ -184,6 +184,11 @@ class StreamingService
             array_push($cmd, '-stream_loop', '-1');
         }
 
+        // Allow all extensions when reading an M3U8 playlist (covers ytdl:// entries)
+        if (str_ends_with(strtolower($sourceUrl), '.m3u8') || str_ends_with(strtolower($sourceUrl), '.m3u')) {
+            array_push($cmd, '-allowed_extensions', 'ALL');
+        }
+
         if ($loop || $this->protocol->detect($sourceUrl) === 'file') {
             $cmd[] = '-re';
         }

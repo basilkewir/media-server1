@@ -142,7 +142,7 @@ server {
     server_name ${DOMAIN};
     root ${APP_DIR}/public;
     index index.php;
-    client_max_body_size 64M;
+    client_max_body_size 2100M;
 
     location / {
         try_files \$uri \$uri/ /index.php?\$query_string;
@@ -156,6 +156,8 @@ server {
         fastcgi_buffer_size 128k;
         fastcgi_buffers 4 256k;
         fastcgi_busy_buffers_size 256k;
+        fastcgi_read_timeout 3600;
+        fastcgi_send_timeout 3600;
     }
 
     location /streams/ {
@@ -184,7 +186,18 @@ sed -i 's/^pm.max_children = .*/pm.max_children = 50/' /etc/php/8.3/fpm/pool.d/w
 sed -i 's/^pm.start_servers = .*/pm.start_servers = 5/' /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true
 sed -i 's/^pm.min_spare_servers = .*/pm.min_spare_servers = 5/' /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true
 sed -i 's/^pm.max_spare_servers = .*/pm.max_spare_servers = 35/' /etc/php/8.3/fpm/pool.d/www.conf 2>/dev/null || true
+# Upload limits for VOD files (2 GB)
+echo 'php_admin_value[upload_max_filesize] = 2048M' >> /etc/php/8.3/fpm/pool.d/www.conf
+echo 'php_admin_value[post_max_size] = 2100M'       >> /etc/php/8.3/fpm/pool.d/www.conf
+echo 'php_admin_value[max_execution_time] = 3600'   >> /etc/php/8.3/fpm/pool.d/www.conf
+echo 'php_admin_value[max_input_time] = 3600'       >> /etc/php/8.3/fpm/pool.d/www.conf
+echo 'php_admin_value[memory_limit] = 512M'         >> /etc/php/8.3/fpm/pool.d/www.conf
 systemctl restart php8.3-fpm
+
+# ── yt-dlp (YouTube VOD support) ─────────────────────────────────────────────
+echo "[10b] Installing yt-dlp for YouTube VOD fallback..."
+curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+chmod +x /usr/local/bin/yt-dlp
 
 # ── 12. SUPERVISOR (Queue + Monitors + Scheduler) ────────────────────────────
 echo "[11/12] Configuring Supervisor..."

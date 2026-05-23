@@ -51,6 +51,7 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     // VOD Library
     Route::get('channels/{channel}/vod',                    [\App\Http\Controllers\Admin\VodController::class, 'index'])->name('vod.index');
     Route::post('channels/{channel}/vod',                   [\App\Http\Controllers\Admin\VodController::class, 'store'])->name('vod.store');
+    Route::post('channels/{channel}/vod/youtube',           [\App\Http\Controllers\Admin\VodController::class, 'storeYoutube'])->name('vod.store-youtube');
     Route::delete('channels/{channel}/vod/{vodFile}',       [\App\Http\Controllers\Admin\VodController::class, 'destroy'])->name('vod.destroy');
     Route::post('channels/{channel}/vod/reorder',           [\App\Http\Controllers\Admin\VodController::class, 'reorder'])->name('vod.reorder');
 

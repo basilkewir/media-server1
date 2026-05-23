@@ -11,7 +11,8 @@ use Illuminate\Support\Facades\Storage;
 class VodFile extends Model
 {
     protected $fillable = [
-        'channel_id', 'title', 'filename', 'original_name',
+        'channel_id', 'source_type', 'youtube_url',
+        'title', 'filename', 'original_name',
         'mime_type', 'size_bytes', 'duration_seconds', 'sort_order', 'is_active',
     ];
 
@@ -22,6 +23,11 @@ class VodFile extends Model
         'sort_order'       => 'integer',
     ];
 
+    public function isYoutube(): bool
+    {
+        return $this->source_type === 'youtube';
+    }
+
     public function channel(): BelongsTo
     {
         return $this->belongsTo(Channel::class);
@@ -29,7 +35,20 @@ class VodFile extends Model
 
     public function url(): string
     {
+        if ($this->isYoutube()) {
+            return $this->youtube_url;
+        }
         return Storage::disk('vod')->url($this->filename);
+    }
+
+    /** URL suitable for FFmpeg ingest — YouTube entries use yt-dlp pipe syntax */
+    public function ffmpegUrl(): string
+    {
+        if ($this->isYoutube()) {
+            // yt-dlp best mp4 piped to ffmpeg
+            return $this->youtube_url;
+        }
+        return Storage::disk('vod')->path($this->filename);
     }
 
     public function path(): string

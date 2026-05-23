@@ -22,6 +22,11 @@ echo.
 echo [MediaServer] Done. Now run on your server:
 echo.
 echo   ssh root@YOUR_SERVER_IP
-echo   bash ^<(curl -fsSL https://raw.githubusercontent.com/basilkewir/media-server1/main/server-install.sh)
+echo   cd /var/www/mediaserver
+echo   git pull
+echo   php artisan migrate --force
+echo   php artisan config:clear
+echo   php artisan cache:clear
+echo   supervisorctl restart all
 echo.
 pause

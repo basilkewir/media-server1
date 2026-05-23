@@ -36,9 +36,16 @@ class RtmpWebhookController extends Controller
         }
 
         try {
-            // Source URL is the local RTMP re-stream from nginx-rtmp/SRS
             $sourceUrl = "rtmp://127.0.0.1/live/{$slug}";
-            app(StreamingService::class)->startStream($channel, $sourceUrl);
+            $service   = app(StreamingService::class);
+
+            // If channel is currently on VOD fallback, recover to live instead of a cold start
+            $active = $channel->activeStream();
+            if ($active && $active->status === 'fallback') {
+                $service->recoverFromFallback($channel, $sourceUrl);
+            } else {
+                $service->startStream($channel, $sourceUrl);
+            }
         } catch (\Exception $e) {
             Log::error('RTMP startStream failed', ['slug' => $slug, 'error' => $e->getMessage()]);
             // Still return 200 so nginx-rtmp allows the stream through

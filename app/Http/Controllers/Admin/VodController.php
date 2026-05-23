@@ -15,13 +15,20 @@ use Illuminate\View\View;
 
 class VodController extends Controller
 {
+    /** 2 GB per channel in bytes */
+    private const QUOTA_BYTES = 2 * 1024 * 1024 * 1024;
+
+    /** Max single file upload: 2 GB */
+    private const MAX_UPLOAD_MB = 2048;
+
     public function index(Channel $channel): View
     {
         abort_if(!auth()->user()->canManageChannel($channel), 403);
 
-        $files = $channel->vodFiles()->orderBy('sort_order')->orderBy('created_at')->get();
+        $files     = $channel->vodFiles()->orderBy('sort_order')->orderBy('created_at')->get();
+        $usedBytes = $channel->vodFiles()->where('source_type', 'upload')->sum('size_bytes');
 
-        return view('admin.vod.index', compact('channel', 'files'));
+        return view('admin.vod.index', compact('channel', 'files', 'usedBytes'));
     }
 
     public function store(Request $request, Channel $channel): RedirectResponse
@@ -29,32 +36,69 @@ class VodController extends Controller
         abort_if(!auth()->user()->canManageChannel($channel), 403);
 
         $request->validate([
-            'file'  => 'required|file|mimes:mp4,mkv,mov,avi,ts,m2ts,flv,webm|max:10240000', // 10 GB
+            'file'  => 'required|file|mimes:mp4,mkv,mov,avi,ts,m2ts,flv,webm|max:' . self::MAX_UPLOAD_MB . '000',
             'title' => 'nullable|string|max:255',
         ]);
 
-        $uploaded = $request->file('file');
+        $uploaded  = $request->file('file');
+        $fileSize  = $uploaded->getSize();
+        $usedBytes = $channel->vodFiles()->where('source_type', 'upload')->sum('size_bytes');
+
+        if (($usedBytes + $fileSize) > self::QUOTA_BYTES) {
+            $remaining = $this->formatBytes(self::QUOTA_BYTES - $usedBytes);
+            return back()->withErrors(['file' => "Channel storage quota exceeded. Remaining: {$remaining}"]);
+        }
+
         $filename = Str::uuid() . '.' . $uploaded->getClientOriginalExtension();
 
         Storage::disk('vod')->putFileAs('', $uploaded, $filename);
 
-        // Probe duration with ffprobe if available
         $duration = $this->probeDuration(Storage::disk('vod')->path($filename));
 
         $channel->vodFiles()->create([
+            'source_type'   => 'upload',
             'title'         => $request->input('title') ?: pathinfo($uploaded->getClientOriginalName(), PATHINFO_FILENAME),
             'filename'      => $filename,
             'original_name' => $uploaded->getClientOriginalName(),
             'mime_type'     => $uploaded->getMimeType(),
-            'size_bytes'    => $uploaded->getSize(),
+            'size_bytes'    => $fileSize,
             'duration_seconds' => $duration,
             'sort_order'    => $channel->vodFiles()->max('sort_order') + 1,
         ]);
 
-        // Auto-generate M3U8 playlist for this channel
         $this->generatePlaylist($channel);
 
         return back()->with('success', 'Video uploaded successfully.');
+    }
+
+    public function storeYoutube(Request $request, Channel $channel): RedirectResponse
+    {
+        abort_if(!auth()->user()->canManageChannel($channel), 403);
+
+        $request->validate([
+            'youtube_url' => ['required', 'url', 'regex:/^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w\-]{11}/'],
+            'title'       => 'nullable|string|max:255',
+        ]);
+
+        $url = $request->input('youtube_url');
+
+        // Normalise to short URL and extract video ID for title fallback
+        preg_match('/(?:v=|youtu\.be\/)([\w\-]{11})/', $url, $m);
+        $videoId = $m[1] ?? Str::random(11);
+        $title   = $request->input('title') ?: "YouTube: {$videoId}";
+
+        $channel->vodFiles()->create([
+            'source_type'   => 'youtube',
+            'youtube_url'   => $url,
+            'title'         => $title,
+            'filename'      => '',
+            'original_name' => $url,
+            'sort_order'    => $channel->vodFiles()->max('sort_order') + 1,
+        ]);
+
+        $this->generatePlaylist($channel);
+
+        return back()->with('success', 'YouTube video added to playlist.');
     }
 
     public function destroy(Channel $channel, VodFile $vodFile): RedirectResponse
@@ -62,12 +106,14 @@ class VodController extends Controller
         abort_if(!auth()->user()->canManageChannel($channel), 403);
         abort_if($vodFile->channel_id !== $channel->id, 403);
 
-        Storage::disk('vod')->delete($vodFile->filename);
-        $vodFile->delete();
+        if (!$vodFile->isYoutube() && $vodFile->filename) {
+            Storage::disk('vod')->delete($vodFile->filename);
+        }
 
+        $vodFile->delete();
         $this->generatePlaylist($channel);
 
-        return back()->with('success', 'Video deleted.');
+        return back()->with('success', 'Video removed.');
     }
 
     public function reorder(Request $request, Channel $channel): RedirectResponse
@@ -86,8 +132,9 @@ class VodController extends Controller
     }
 
     /**
-     * Generate an M3U8 playlist from all active VOD files for a channel
-     * and update the channel's vod_playlist_url to point to it.
+     * Generate an M3U8 playlist from all active VOD files.
+     * Uploaded files use their HTTP URL; YouTube entries use yt-dlp pipe syntax
+     * so FFmpeg can pull them during fallback ingest.
      */
     public function generatePlaylist(Channel $channel): void
     {
@@ -97,18 +144,26 @@ class VodController extends Controller
             return;
         }
 
-        $lines = ["#EXTM3U"];
+        $lines = ['#EXTM3U'];
+
         foreach ($files as $file) {
             $duration = $file->duration_seconds ?? -1;
-            $lines[] = "#EXTINF:{$duration},{$file->title}";
-            $lines[] = $file->path();
+            $lines[]  = "#EXTINF:{$duration},{$file->title}";
+
+            if ($file->isYoutube()) {
+                // FFmpeg reads YouTube via yt-dlp: pipe:// syntax
+                // Format: ytdl://URL  — supported by ffmpeg when built with yt-dlp
+                $lines[] = "ytdl://{$file->youtube_url}";
+            } else {
+                $lines[] = $file->ffmpegUrl();
+            }
         }
 
         $playlistName = "vod_{$channel->slug}.m3u8";
         Storage::disk('vod')->put($playlistName, implode("\n", $lines));
 
         $channel->update([
-            'vod_playlist_url' => Storage::disk('vod')->path($playlistName),
+            'vod_playlist_url' => Storage::disk('vod')->url($playlistName),
         ]);
     }
 
@@ -128,5 +183,12 @@ class VodController extends Controller
         } catch (\Exception) {
             return null;
         }
+    }
+
+    private function formatBytes(int $bytes): string
+    {
+        if ($bytes >= 1073741824) return round($bytes / 1073741824, 2) . ' GB';
+        if ($bytes >= 1048576)    return round($bytes / 1048576, 2) . ' MB';
+        return round($bytes / 1024, 2) . ' KB';
     }
 }
