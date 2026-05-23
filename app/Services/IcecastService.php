@@ -99,7 +99,12 @@ XML;
     protected function reloadIcecast(): void
     {
         $output = null; $code = 0;
-        exec('systemctl restart icecast2 2>&1', $output, $code);
+        // Try with sudo first (requires /etc/sudoers.d/www-data-icecast)
+        exec('sudo systemctl restart icecast2 2>&1', $output, $code);
+        if ($code !== 0) {
+            // Fallback: send SIGHUP to reload config without full restart
+            exec('pkill -HUP icecast2 2>&1', $output, $code);
+        }
         if ($code !== 0) {
             Log::warning('Failed to restart Icecast2', ['output' => implode("\n", $output)]);
         }
