@@ -1,45 +1,44 @@
 @extends('layouts.client')
-
 @section('title', 'Dashboard')
 
 @section('content')
-<div style="max-width: 900px;">
-    <h2 style="font-size: 1.875rem; margin-bottom: 1.5rem;">Dashboard</h2>
+@if($clientSubscription)
+<div class="alert alert-success" style="border-left:3px solid var(--success);">
+    <strong>{{ $clientSubscription['type_label'] }}</strong>
+    @if($clientSubscription['days_remaining'] !== null)
+        — {{ $clientSubscription['days_remaining'] }} days remaining
+    @endif
+</div>
+@else
+<div class="alert alert-warning">Redeem an access code to unlock features.</div>
+@endif
 
-    @if($clientSubscription)
-    <div style="background: var(--surface); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border-left: 4px solid var(--primary);">
-        <h3 style="font-size: 1.125rem; margin-bottom: 0.5rem;">Active Subscription</h3>
-        <p style="color: var(--text-muted);">
-            <strong>{{ $clientSubscription['type_label'] }}</strong>
-            @if($clientSubscription['days_remaining'])
-                &mdash; {{ $clientSubscription['days_remaining'] }} days remaining
-            @endif
-        </p>
+<div class="card">
+    <div class="card-title">Available Channels</div>
+    @php $channels = \App\Models\Channel::where('is_active',true)->get(); @endphp
+    @if($channels->isEmpty())
+    <div class="empty-state">
+        <div class="empty-state-title">No channels available</div>
+        <div class="empty-state-text">Check back later for live streams.</div>
     </div>
     @else
-    <div style="background: var(--surface); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem;">
-        <h3 style="font-size: 1.125rem; margin-bottom: 0.5rem;">No Active Subscription</h3>
-        <p style="color: var(--text-muted);">Enter an access code to unlock content.</p>
-    </div>
-    @endif
-
-    <h3 style="font-size: 1.25rem; margin-bottom: 1rem;">Available Channels</h3>
-    @if($channels->count())
-    <div style="display: grid; gap: 1rem;">
-        @foreach($channels as $channel)
-        <div style="background: var(--surface); border-radius: 12px; padding: 1.25rem; display: flex; align-items: center; justify-content: space-between;">
-            <div>
-                <div style="font-weight: 600;">{{ $channel->name }}</div>
-                <div style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem;">
-                    {{ $channel->is_live ? 'Live' : 'Offline' }} &middot; {{ $channel->resolution ?? 'HD' }}
-                </div>
+    <div class="channel-grid">
+        @foreach($channels as $ch)
+        @php $activeStream = $ch->activeStream(); @endphp
+        <div class="channel-card">
+            <div class="channel-card-title">{{ $ch->name }}</div>
+            <div class="channel-card-meta">
+                @if($activeStream)
+                    <span class="badge badge-success"><span class="badge-dot green" style="margin-right:4px;"></span>Live</span>
+                    @if($ch->resolution) {{ $ch->resolution }} @endif
+                @else
+                    <span class="badge badge-neutral"><span class="badge-dot gray" style="margin-right:4px;"></span>Offline</span>
+                @endif
             </div>
-            <a href="{{ route('stream.play', $channel->slug) }}" style="background: var(--primary); color: #fff; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 500; font-size: 0.875rem;">Watch</a>
+            <a href="{{ route('stream.play', $ch->slug) }}" class="btn btn-primary btn-sm">Watch</a>
         </div>
         @endforeach
     </div>
-    @else
-    <p style="color: var(--text-muted);">No channels available.</p>
     @endif
 </div>
 @endsection

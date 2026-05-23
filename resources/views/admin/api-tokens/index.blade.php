@@ -1,69 +1,54 @@
 @extends('layouts.admin')
 @section('title', 'API Tokens')
+@section('breadcrumb')
+    <a href="{{ route('admin.dashboard') }}">Dashboard</a> <span class="sep">/</span> API Tokens
+@endsection
 
 @section('content')
+<div class="card animate-in">
+    <div class="card-header">
+        <div>
+            <div class="card-title">API Tokens</div>
+            <div class="card-subtitle">Manage bearer tokens for API access</div>
+        </div>
+        <form method="POST" action="{{ route('admin.api-tokens.store') }}" style="display:flex;gap:8px;">
+            @csrf
+            <input name="name" placeholder="Token name" required style="width:180px;">
+            <button type="submit" class="btn btn-primary btn-sm">Generate</button>
+        </form>
+    </div>
 
-@if(session('new_token'))
-<div class="alert alert-success">
-    <strong>Token created — copy it now, it won't be shown again:</strong><br>
-    <code class="mono" style="font-size:1rem;word-break:break-all;">{{ session('new_token') }}</code>
-</div>
-@endif
-
-<div style="display:grid;grid-template-columns:2fr 1fr;gap:1.5rem;">
-
-<div class="card">
-    <div class="card-header"><span class="card-title">🔐 API Tokens</span></div>
-    @if($tokens->count())
-    <table>
-        <thead><tr><th>Name</th><th>Last Used</th><th>Expires</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody>
-        @foreach($tokens as $t)
-        <tr>
-            <td style="font-weight:600;">{{ $t->name }}</td>
-            <td class="text-sm text-muted">{{ $t->last_used_at?->diffForHumans() ?? 'Never' }}</td>
-            <td class="text-sm text-muted">{{ $t->expires_at?->format('Y-m-d') ?? 'Never' }}</td>
-            <td>
-                @if($t->is_active && (!$t->expires_at || $t->expires_at->isFuture()))
-                    <span class="badge badge-live">Active</span>
-                @else
-                    <span class="badge badge-stopped">Revoked</span>
-                @endif
-            </td>
-            <td>
-                @if($t->is_active)
-                <form method="POST" action="{{ route('admin.api-tokens.destroy', $t) }}" onsubmit="return confirm('Revoke this token?')">
-                    @csrf @method('DELETE')
-                    <button class="btn btn-danger btn-sm">Revoke</button>
-                </form>
-                @endif
-            </td>
-        </tr>
-        @endforeach
-        </tbody>
-    </table>
-    {{ $tokens->links() }}
+    @php $tokens = \App\Models\ApiToken::latest()->get(); @endphp
+    @if($tokens->isEmpty())
+    <div class="empty-state">
+        <div class="empty-state-icon"><svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 1v4m0 14v4M4.22 4.22l2.83 2.83"/></svg></div>
+        <div class="empty-state-title">No tokens</div>
+        <div class="empty-state-text">Generate an API token to access the REST API.</div>
+    </div>
     @else
-    <div class="empty"><div class="empty-icon">🔐</div><p>No tokens yet.</p></div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Name</th><th>Token</th><th>Abilities</th><th>Expires</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach($tokens as $t)
+                <tr>
+                    <td><strong>{{ $t->name }}</strong></td>
+                    <td><code style="font-family:var(--font-mono);font-size:11px;">{{ $t->plain_token ?? '••••••••' }}</code></td>
+                    <td>{{ $t->abilities ? implode(', ', $t->abilities) : 'All' }}</td>
+                    <td>{{ $t->expires_at?->format('Y-m-d') ?? '—' }}</td>
+                    <td>
+                        <form method="POST" action="{{ route('admin.api-tokens.destroy', $t) }}" onsubmit="return confirm('Revoke token?')" style="display:inline;">
+                            @csrf @method('DELETE')
+                            <button class="btn btn-ghost btn-xs" style="color:var(--danger);">Revoke</button>
+                        </form>
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
     @endif
-</div>
-
-<div class="card">
-    <div class="card-header"><span class="card-title">Generate Token</span></div>
-    <form method="POST" action="{{ route('admin.api-tokens.store') }}">
-        @csrf
-        <div class="form-group" style="margin-bottom:1rem;">
-            <label>Token Name *</label>
-            <input type="text" name="name" placeholder="My App" required>
-        </div>
-        <div class="form-group" style="margin-bottom:1.5rem;">
-            <label>Expires in (days)</label>
-            <input type="number" name="expires_in" placeholder="Leave blank = never" min="1">
-        </div>
-        <button type="submit" class="btn btn-primary" style="width:100%;">Generate Token</button>
-    </form>
-    <div class="hint" style="margin-top:1rem;">Use tokens in API requests:<br><code class="mono">Authorization: Bearer &lt;token&gt;</code></div>
-</div>
-
 </div>
 @endsection

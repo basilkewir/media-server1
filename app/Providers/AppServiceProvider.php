@@ -14,12 +14,21 @@ use App\Observers\OutputTargetObserver;
 use App\Models\Channel;
 use App\Models\Stream;
 use App\Models\OutputTarget;
+use App\Services\AudioRelayService;
+use App\Services\GraphicsOverlayService;
+use App\Services\StorageQuotaService;
+use App\Services\VodSchedulerService;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        $this->app->singleton(GraphicsOverlayService::class, fn() => new GraphicsOverlayService());
+        $this->app->singleton(StorageQuotaService::class, fn() => new StorageQuotaService());
+        $this->app->singleton(VodSchedulerService::class, fn() => new VodSchedulerService());
+        $this->app->singleton(AudioRelayService::class, fn($app) => new AudioRelayService(
+            $app->make(\App\Services\IcecastService::class)
+        ));
     }
 
     public function boot(): void

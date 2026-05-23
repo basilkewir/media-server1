@@ -10,7 +10,8 @@ use Exception;
 class StreamHealthMonitor
 {
     public function __construct(
-        protected ProtocolDetector $protocol
+        protected ProtocolDetector $protocol,
+        protected AudioRelayService $audioRelay,
     ) {}
 
     protected function streaming(): StreamingService
@@ -87,6 +88,11 @@ class StreamHealthMonitor
             'message'    => 'Auto-switched to VOD fallback (live source unavailable)',
             'severity'   => StreamEvent::SEVERITY_WARNING,
         ]);
+
+        // Also trigger audio relay fallback if configured
+        if ($channel->audio_fallback_enabled) {
+            $this->audioRelay->startAudioRelay($channel);
+        }
     }
 
     public function checkAllChannels(): void

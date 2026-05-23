@@ -2,24 +2,19 @@
 
 @section('title', 'VOD Library — ' . $channel->name)
 
+@section('topbar-actions')
+    <a href="{{ route('admin.vod-schedules.index', $channel) }}" class="btn btn-ghost btn-sm">📅 Schedule</a>
+    <a href="{{ route('admin.channels.graphics', $channel) }}" class="btn btn-ghost btn-sm">🎨 Graphics</a>
+    <a href="{{ route('admin.channels.edit', $channel) }}" class="btn btn-ghost btn-sm">← Channel</a>
+@endsection
+
 @section('content')
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
     <div>
         <h1 style="margin:0;">VOD Library</h1>
         <p style="margin:0.25rem 0 0; color:var(--muted);">{{ $channel->name }} &mdash; <code>{{ $channel->slug }}</code></p>
     </div>
-    <a href="{{ route('admin.channels.edit', $channel) }}" class="btn btn-ghost btn-sm">← Channel</a>
 </div>
-
-@if($errors->any())
-<div class="alert alert-danger" style="margin-bottom:1rem;">
-    <ul style="margin:0; padding-left:1.2rem;">
-        @foreach($errors->all() as $error)
-            <li>{{ $error }}</li>
-        @endforeach
-    </ul>
-</div>
-@endif
 
 @if(session('success'))
 <div class="alert alert-success" style="margin-bottom:1rem;">{{ session('success') }}</div>
@@ -27,21 +22,27 @@
 
 {{-- Storage Quota --}}
 @php
-    $quotaBytes = 2 * 1024 * 1024 * 1024;
-    $pct        = $quotaBytes > 0 ? min(100, round($usedBytes / $quotaBytes * 100)) : 0;
-    $usedFmt    = $usedBytes >= 1073741824
-        ? round($usedBytes / 1073741824, 2) . ' GB'
-        : round($usedBytes / 1048576, 2) . ' MB';
-    $barColor   = $pct >= 90 ? 'var(--danger)' : ($pct >= 70 ? 'orange' : 'var(--primary)');
+    $quotaInfo = $quotaInfo ?? ['quota_bytes' => 2147483648, 'used_bytes' => $usedBytes, 'remaining_bytes' => max(0, 2147483648 - $usedBytes), 'quota_pct' => 0, 'quota_formatted' => '2 GB', 'used_formatted' => '0 MB', 'remaining_formatted' => '2 GB'];
+    if (($quotaInfo['quota_bytes'] ?? 0) > 0) {
+        $pct = $quotaInfo['quota_pct'] ?? min(100, round($usedBytes / $quotaInfo['quota_bytes'] * 100));
+        $barColor = $pct >= 90 ? 'var(--danger)' : ($pct >= 70 ? 'orange' : 'var(--primary)');
+    } else {
+        $pct = 0; $barColor = 'var(--primary)';
+    }
 @endphp
 <div class="card" style="margin-bottom:1rem;">
     <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.4rem;">
         <span>Storage used (uploaded files)</span>
-        <span>{{ $usedFmt }} / 2 GB &mdash; {{ $pct }}%</span>
+        <span>{{ $quotaInfo['used_formatted'] ?? '0 MB' }} / {{ $quotaInfo['quota_formatted'] ?? '2 GB' }} &mdash; {{ $pct }}%</span>
     </div>
     <div style="background:var(--border); border-radius:4px; height:8px; overflow:hidden;">
         <div style="width:{{ $pct }}%; background:{{ $barColor }}; height:100%; transition:width 0.3s;"></div>
     </div>
+    @if(($quotaInfo['remaining_bytes'] ?? 0) <= 0)
+    <div style="margin-top:0.5rem; font-size:0.8rem; color:var(--danger);">
+        ⚠ Storage full. Upgrade your plan or delete files to upload more.
+    </div>
+    @endif
 </div>
 
 {{-- Add Video Tabs --}}
@@ -51,21 +52,38 @@
         <button class="btn btn-ghost btn-sm" id="tab-youtube-btn" onclick="switchTab('youtube')" style="border-radius:0 4px 4px 0;">▶ YouTube URL</button>
     </div>
 
-    {{-- Upload form --}}
+    {{-- Upload form with drag-drop --}}
     <div id="tab-upload">
-        <form method="POST" action="{{ route('admin.vod.store', $channel) }}" enctype="multipart/form-data">
+        <form method="POST" action="{{ route('admin.vod.store', $channel) }}" enctype="multipart/form-data" id="upload-form">
             @csrf
-            <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:1rem; align-items:end;">
-                <div class="form-group">
-                    <label>Video File <span style="color:var(--danger)">*</span></label>
-                    <input type="file" name="file" accept="video/*,.ts,.m2ts" required>
-                    <span class="hint">MP4, MKV, MOV, AVI, TS, FLV, WebM — max 2 GB</span>
+            <div id="drop-zone"
+                 style="border:2px dashed var(--border); border-radius:10px; padding:2rem 1.5rem; text-align:center; cursor:pointer; transition:all 0.2s;"
+                 ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
+                 onclick="document.getElementById('file-input').click()">
+                <div style="font-size:2rem; margin-bottom:0.5rem;">📁</div>
+                <p style="font-weight:600;">Drop video file here or click to browse</p>
+                <p class="hint">MP4, MKV, MOV, AVI, TS, FLV, WebM — max {{ $quotaInfo['max_upload_bytes'] ?? 524288000 > 104857600 ? round(($quotaInfo['max_upload_bytes'] ?? 524288000) / 1048576) . ' MB' : round(($quotaInfo['max_upload_bytes'] ?? 524288000) / 1024) . ' KB' }}</p>
+                <p id="file-name" style="color:#4ade80;font-weight:600;margin-top:0.5rem;display:none;"></p>
+                <input type="file" name="file" id="file-input" accept="video/*,.ts,.m2ts" required style="display:none;" onchange="showFileName(this)">
+            </div>
+
+            {{-- Progress bar --}}
+            <div id="progress-container" style="display:none; margin-top:1rem;">
+                <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:0.3rem;">
+                    <span id="progress-label">Uploading...</span>
+                    <span id="progress-pct">0%</span>
                 </div>
+                <div style="background:var(--border); border-radius:10px; height:10px; overflow:hidden;">
+                    <div id="progress-bar" style="width:0%; background:var(--primary); height:100%; border-radius:10px; transition:width 0.2s;"></div>
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr auto; gap:1rem; align-items:end; margin-top:1rem;">
                 <div class="form-group">
                     <label>Title <span class="hint">(optional)</span></label>
-                    <input type="text" name="title" placeholder="Leave blank to use filename">
+                    <input type="text" name="title" id="upload-title" placeholder="Leave blank to use filename">
                 </div>
-                <button type="submit" class="btn btn-primary">Upload</button>
+                <button type="submit" class="btn btn-primary" id="upload-btn">Upload</button>
             </div>
         </form>
     </div>
@@ -98,13 +116,16 @@
 <div class="card">
     <div class="card-header">
         <span class="card-title">Videos ({{ $files->count() }})</span>
-        @if($files->count() > 1)
-        <form method="POST" action="{{ route('admin.vod.reorder', $channel) }}" id="reorder-form">
-            @csrf
-            <div id="reorder-inputs"></div>
-            <button type="submit" class="btn btn-ghost btn-sm">Save Order</button>
-        </form>
-        @endif
+        <div class="actions">
+            <a href="{{ route('admin.vod-schedules.index', $channel) }}" class="btn btn-ghost btn-sm">📅 Schedule</a>
+            @if($files->count() > 1)
+            <form method="POST" action="{{ route('admin.vod.reorder', $channel) }}" id="reorder-form">
+                @csrf
+                <div id="reorder-inputs"></div>
+                <button type="submit" class="btn btn-ghost btn-sm">Save Order</button>
+            </form>
+            @endif
+        </div>
     </div>
 
     @if($files->isEmpty())
@@ -139,11 +160,13 @@
                 <td>{{ $file->isYoutube() ? '—' : $file->formattedSize() }}</td>
                 <td>{{ $file->formattedDuration() }}</td>
                 <td>
-                    <form method="POST" action="{{ route('admin.vod.destroy', [$channel, $file]) }}"
-                          onsubmit="return confirm('Remove this video?')">
-                        @csrf @method('DELETE')
-                        <button type="submit" class="btn btn-danger btn-sm">Remove</button>
-                    </form>
+                    <div class="actions">
+                        <form method="POST" action="{{ route('admin.vod.destroy', [$channel, $file]) }}"
+                              onsubmit="return confirm('Remove this video?')">
+                            @csrf @method('DELETE')
+                            <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
             @endforeach
@@ -175,12 +198,78 @@ function switchTab(tab) {
     document.getElementById('tab-youtube-btn').style.borderRadius = '0 4px 4px 0';
 }
 
-// Auto-open YouTube tab if there were YouTube validation errors
-@if($errors->has('youtube_url'))
-switchTab('youtube');
+// Auto-open correct tab
+@if($errors->has('youtube_url') || $errors->has('file') || $errors->any())
+    @if($errors->has('youtube_url'))
+        switchTab('youtube');
+    @else
+        switchTab('upload');
+    @endif
 @else
-switchTab('upload');
+    switchTab('upload');
 @endif
+
+// Drag-drop upload
+function showFileName(input) {
+    if (input.files.length > 0) {
+        const f = input.files[0];
+        const mb = (f.size / 1048576).toFixed(1);
+        document.getElementById('file-name').textContent = f.name + ' (' + mb + ' MB)';
+        document.getElementById('file-name').style.display = '';
+    }
+}
+
+function handleDragOver(e) {
+    e.preventDefault(); e.stopPropagation();
+    document.getElementById('drop-zone').style.borderColor = 'var(--primary)';
+    document.getElementById('drop-zone').style.background = 'rgba(37,99,235,0.05)';
+}
+
+function handleDragLeave(e) {
+    e.preventDefault(); e.stopPropagation();
+    document.getElementById('drop-zone').style.borderColor = 'var(--border)';
+    document.getElementById('drop-zone').style.background = '';
+}
+
+function handleDrop(e) {
+    e.preventDefault(); e.stopPropagation();
+    document.getElementById('drop-zone').style.borderColor = 'var(--border)';
+    document.getElementById('drop-zone').style.background = '';
+    const dt = e.dataTransfer;
+    if (dt.files.length > 0) {
+        document.getElementById('file-input').files = dt.files;
+        showFileName(document.getElementById('file-input'));
+    }
+}
+
+// Upload progress simulation
+document.getElementById('upload-form').addEventListener('submit', function(e) {
+    const fileInput = document.getElementById('file-input');
+    if (!fileInput.files.length) return;
+    const file = fileInput.files[0];
+    const maxSize = {{ $quotaInfo['max_upload_bytes'] ?? 524288000 }};
+    if (file.size > maxSize) {
+        e.preventDefault();
+        alert('File size exceeds the maximum allowed upload size.');
+        return false;
+    }
+    document.getElementById('progress-container').style.display = '';
+    document.getElementById('upload-btn').disabled = true;
+    document.getElementById('upload-btn').textContent = 'Uploading...';
+    simulateProgress(file.size);
+});
+
+function simulateProgress(fileSize) {
+    let loaded = 0;
+    const total = fileSize;
+    const interval = setInterval(() => {
+        loaded += Math.min(total * 0.1, total - loaded);
+        if (loaded >= total) { loaded = total; clearInterval(interval); }
+        const pct = Math.round((loaded / total) * 100);
+        document.getElementById('progress-bar').style.width = pct + '%';
+        document.getElementById('progress-pct').textContent = pct + '%';
+    }, 200);
+}
 
 // Drag-to-reorder
 const list = document.getElementById('sortable-list');
@@ -193,7 +282,11 @@ if (list) {
         row.addEventListener('dragover',  e => {
             e.preventDefault();
             const after = getAfter(list, e.clientY);
-            after ? list.insertBefore(dragging, after) : list.appendChild(dragging);
+            if (after && dragging) {
+                after === dragging.nextElementSibling ? list.insertBefore(dragging, after) : list.insertBefore(dragging, after);
+            } else if (dragging) {
+                list.appendChild(dragging);
+            }
         });
     });
 }

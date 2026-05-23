@@ -1,32 +1,33 @@
 @extends('layouts.client')
-
 @section('title', 'Live Streams')
 
 @section('content')
-<div style="max-width: 900px;">
-    <h2 style="font-size: 1.875rem; margin-bottom: 1.5rem;">Live Streams</h2>
-
-    @if($channels->count())
-    <div style="display: grid; gap: 1rem;">
-        @foreach($channels as $channel)
-        <div style="background: var(--surface); border-radius: 12px; padding: 1.25rem; display: flex; align-items: center; justify-content: space-between;">
-            <div>
-                <div style="font-weight: 600;">{{ $channel->name }}</div>
-                <div style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem;">
-                    @if($channel->is_live)
-                        <span style="color: var(--success);">● Live</span>
-                    @else
-                        <span style="color: var(--text-muted);">● Offline</span>
-                    @endif
-                    &middot; {{ $channel->resolution ?? 'HD' }}
-                </div>
+<div class="card">
+    <div class="card-title">Live Streams</div>
+    @php $channels = \App\Models\Channel::where('is_active',true)->get(); @endphp
+    @if($channels->isEmpty())
+    <div class="empty-state">
+        <div class="empty-state-title">No live streams available</div>
+        <div class="empty-state-text">No channels are broadcasting right now.</div>
+    </div>
+    @else
+    <div class="channel-grid">
+        @foreach($channels as $ch)
+        @php $activeStream = $ch->activeStream(); @endphp
+        <div class="channel-card">
+            <div class="channel-card-title">{{ $ch->name }}</div>
+            <div class="channel-card-meta">
+                @if($activeStream)
+                    <span class="badge badge-success"><span class="badge-dot green" style="margin-right:4px;"></span>Live</span>
+                @else
+                    <span class="badge badge-neutral"><span class="badge-dot gray" style="margin-right:4px;"></span>Offline</span>
+                @endif
+                @if($ch->resolution) {{ $ch->resolution }} @endif
             </div>
-            <a href="{{ route('stream.play', $channel->slug) }}" style="background: var(--primary); color: #fff; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 500; font-size: 0.875rem;">Watch</a>
+            <a href="{{ route('stream.play', $ch->slug) }}" class="btn btn-primary btn-sm">Watch</a>
         </div>
         @endforeach
     </div>
-    @else
-    <p style="color: var(--text-muted);">No live streams available.</p>
     @endif
 </div>
 @endsection

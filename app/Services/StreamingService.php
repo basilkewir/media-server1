@@ -18,6 +18,7 @@ class StreamingService
 {
     public function __construct(
         protected ProtocolDetector $protocol,
+        protected GraphicsOverlayService $overlayService,
     ) {}
 
     /**
@@ -152,6 +153,13 @@ class StreamingService
                 ->where('status', 'fallback')
                 ->update(['status' => 'completed', 'ended_at' => now()]);
 
+            // Stop audio relay if running
+            $audioRelay = app(\App\Services\AudioRelayService::class);
+            $audioRelay->stopAudioRelay($channel);
+
+            // Restart audio relay outputs configured to run during live
+            $this->outputManager()->startChannelOutputs($channel, 'live');
+
             StreamEvent::create([
                 'channel_id' => $channel->id,
                 'event_type' => StreamEvent::EVENT_FALLBACK_RECOVERED,
@@ -209,6 +217,14 @@ class StreamingService
             return;
         }
 
+        // ── Single quality ────────────────────────────────────────────
+        $hasOverlays = $this->overlayService->hasOverlays($channel);
+
+        if ($hasOverlays) {
+            $this->startIngestWithOverlays($cmd, $channel, $outputDir, $hlsDuration, $hlsListSize, $pipe);
+            return;
+        }
+
         // ── Single quality (copy) ────────────────────────────────────────────
         $teeOutputs = $this->buildTeeOutputs($outputDir, $hlsDuration, $hlsListSize, $pipe);
 
@@ -263,10 +279,20 @@ class StreamingService
     ): void {
         $cmd = $baseCmd;
 
+        $hasOverlays = $this->overlayService->hasOverlays($channel);
+        $filterComplex = $hasOverlays ? $this->overlayService->buildFilterComplex($channel) : null;
+
         // One filter_complex split into N renditions
         $splits = count($ladder);
-        $splitMap = implode('', array_map(fn($i) => "[v{$i}]", range(0, $splits - 1)));
-        array_push($cmd, '-filter_complex', "[0:v]split={$splits}{$splitMap}");
+        if ($filterComplex) {
+            // When overlays exist, chain: [0:v] + overlay filters -> split
+            // We'll prepend overlay before split
+            $cmd[] = '-filter_complex';
+            $cmd[] = "{$filterComplex};[outv]split={$splits}" . implode('', array_map(fn($i) => "[v{$i}]", range(0, $splits - 1)));
+        } else {
+            $splitMap = implode('', array_map(fn($i) => "[v{$i}]", range(0, $splits - 1)));
+            array_push($cmd, '-filter_complex', "[0:v]split={$splits}{$splitMap}");
+        }
 
         $teeOutputs = [];
 
@@ -310,6 +336,41 @@ class StreamingService
 
         // Write master HLS playlist
         $this->writeMasterPlaylist($channel, $outputDir, $ladder);
+
+        $this->launchProcess($cmd, $channel, '', false, $pipe);
+    }
+
+    /**
+     * Ingest with overlay graphics (logo, watermark, ticker).
+     * Cannot use -c:v copy with filters, so we re-encode to h264.
+     */
+    protected function startIngestWithOverlays(
+        array $baseCmd, Channel $channel, string $outputDir,
+        string $hlsDuration, string $hlsListSize, string $pipe
+    ): void {
+        $cmd = $baseCmd;
+
+        $filterComplex = $this->overlayService->buildFilterComplex($channel);
+        if ($filterComplex) {
+            array_push($cmd, '-filter_complex', $filterComplex);
+            array_push($cmd, '-map', '[outv]', '-map', '0:a');
+        }
+
+        array_push($cmd,
+            '-c:v', 'libx264',
+            '-preset', 'veryfast',
+            '-crf', '23',
+            '-c:a', 'aac',
+            '-b:a', '128k'
+        );
+
+        $teeOutputs = $this->buildTeeOutputs($outputDir, $hlsDuration, $hlsListSize, $pipe);
+
+        array_push($cmd,
+            '-f', 'tee',
+            '-map', '0',
+            $teeOutputs
+        );
 
         $this->launchProcess($cmd, $channel, '', false, $pipe);
     }

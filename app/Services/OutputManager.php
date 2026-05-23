@@ -457,9 +457,10 @@ class OutputManager
     private function triggersForContext(string $context): array
     {
         return match ($context) {
-            'live'     => [OutputTarget::TRIGGER_ALWAYS, OutputTarget::TRIGGER_LIVE_ONLY],
-            'fallback' => [OutputTarget::TRIGGER_ALWAYS, OutputTarget::TRIGGER_FALLBACK_ONLY],
-            default    => [OutputTarget::TRIGGER_ALWAYS],
+            'live'          => [OutputTarget::TRIGGER_ALWAYS, OutputTarget::TRIGGER_LIVE_ONLY],
+            'fallback'      => [OutputTarget::TRIGGER_ALWAYS, OutputTarget::TRIGGER_FALLBACK_ONLY],
+            'fallback_audio'=> [OutputTarget::TRIGGER_FALLBACK_AUDIO],
+            default         => [OutputTarget::TRIGGER_ALWAYS],
         };
     }
 

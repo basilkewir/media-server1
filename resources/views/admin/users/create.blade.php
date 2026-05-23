@@ -1,57 +1,55 @@
 @extends('layouts.admin')
-
-@section('title', 'New User')
+@section('title', 'Create User')
+@section('breadcrumb')
+    <a href="{{ route('admin.dashboard') }}">Dashboard</a> <span class="sep">/</span>
+    <a href="{{ route('admin.users.index') }}">Users</a> <span class="sep">/</span> Create
+@endsection
 
 @section('content')
-<div class="card">
-    <h1>Create User</h1>
-    <p style="color: var(--text-muted); margin-top: -0.5rem;">Add a new admin or manager account.</p>
-
+<div class="card animate-in">
+    <div class="card-header"><div class="card-title">Create User</div></div>
     <form method="POST" action="{{ route('admin.users.store') }}">
         @csrf
-
-        <div class="form-group">
-            <label>Name <span class="required">*</span></label>
-            <input type="text" name="name" value="{{ old('name') }}" required>
-            @error('name')<small style="color: var(--danger);">{{ $message }}</small>@enderror
+        <div class="form-grid">
+            <div class="form-group">
+                <label class="label-required">Name</label>
+                <input name="name" value="{{ old('name') }}" required>
+            </div>
+            <div class="form-group">
+                <label class="label-required">Email</label>
+                <input type="email" name="email" value="{{ old('email') }}" required>
+            </div>
         </div>
-
-        <div class="form-group">
-            <label>Email <span class="required">*</span></label>
-            <input type="email" name="email" value="{{ old('email') }}" required>
-            @error('email')<small style="color: var(--danger);">{{ $message }}</small>@enderror
+        <div class="form-grid">
+            <div class="form-group">
+                <label class="label-required">Password</label>
+                <input type="password" name="password" required minlength="6">
+            </div>
+            <div class="form-group">
+                <label class="label-required">Role</label>
+                <select name="role" required>
+                    <option value="admin" {{ old('role') === 'admin' ? 'selected' : '' }}>Admin</option>
+                    <option value="manager" {{ old('role') === 'manager' ? 'selected' : '' }} selected>Manager</option>
+                </select>
+            </div>
         </div>
-
-        <div class="form-group">
-            <label>Password <span class="required">*</span></label>
-            <input type="password" name="password" required>
-            @error('password')<small style="color: var(--danger);">{{ $message }}</small>@enderror
-        </div>
-
-        <div class="form-group">
-            <label>Role <span class="required">*</span></label>
-            <select name="role" required>
-                <option value="manager" {{ old('role') == 'manager' ? 'selected' : '' }}>Manager — Can manage assigned channels only</option>
-                <option value="admin" {{ old('role') == 'admin' ? 'selected' : '' }}>Admin — Full access to all channels and users</option>
-            </select>
-            @error('role')<small style="color: var(--danger);">{{ $message }}</small>@enderror
-        </div>
-
-        <div class="form-group">
-            <label>Assigned Channels <small>(for managers — admins see all channels)</small></label>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; margin-top: 0.5rem;">
-                @foreach($channels as $channel)
-                <label style="display: flex; align-items: center; gap: 0.5rem; font-weight: 500; cursor: pointer;">
-                    <input type="checkbox" name="channels[]" value="{{ $channel->id }}" {{ in_array($channel->id, old('channels', [])) ? 'checked' : '' }}>
-                    {{ $channel->name }}
+        @if($channels->isNotEmpty())
+        <div class="form-group" style="margin-top:12px;">
+            <label>Assign Channels</label>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
+                @foreach($channels as $ch)
+                <label class="toggle-row">
+                    <input type="checkbox" name="channels[]" value="{{ $ch->id }}" {{ in_array($ch->id, old('channels', [])) ? 'checked' : '' }}>
+                    {{ $ch->name }}
                 </label>
                 @endforeach
             </div>
-            @error('channels')<small style="color: var(--danger);">{{ $message }}</small>@enderror
         </div>
-
-        <button type="submit" class="btn btn-primary">Create User</button>
-        <a href="{{ route('admin.users.index') }}" style="margin-left: 0.75rem; color: var(--text-muted);">Cancel</a>
+        @endif
+        <div style="margin-top:20px;display:flex;gap:10px;">
+            <button type="submit" class="btn btn-primary">Create User</button>
+            <a href="{{ route('admin.users.index') }}" class="btn btn-ghost">Cancel</a>
+        </div>
     </form>
 </div>
 @endsection

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Channel extends Model
 {
@@ -18,7 +19,13 @@ class Channel extends Model
         'push_url',
         'rtmp_push_url',
         'is_active', 'is_live', 'is_icecast_enabled', 'is_relay_enabled',
+        'audio_relay_enabled', 'audio_relay_playlist_url', 'audio_source_url',
+        'audio_fallback_enabled', 'audio_relay_target_url', 'audio_relay_protocol',
         'bitrate_kbps', 'resolution', 'metadata',
+        'logo_path', 'logo_position', 'logo_opacity', 'logo_width', 'logo_height',
+        'watermark_path', 'watermark_position', 'watermark_opacity',
+        'ticker_text', 'ticker_position', 'ticker_text_color', 'ticker_bg_color',
+        'ticker_font_size', 'ticker_speed_ms', 'ticker_enabled',
     ];
 
     protected $casts = [
@@ -26,7 +33,16 @@ class Channel extends Model
         'is_live'            => 'boolean',
         'is_icecast_enabled' => 'boolean',
         'is_relay_enabled'   => 'boolean',
+        'audio_relay_enabled'=> 'boolean',
+        'audio_fallback_enabled' => 'boolean',
         'metadata'           => 'json',
+        'logo_opacity'       => 'integer',
+        'logo_width'         => 'integer',
+        'logo_height'        => 'integer',
+        'watermark_opacity'  => 'integer',
+        'ticker_font_size'   => 'integer',
+        'ticker_speed_ms'    => 'integer',
+        'ticker_enabled'     => 'boolean',
     ];
 
     public function streams(): HasMany
@@ -57,6 +73,11 @@ class Channel extends Model
     public function vodFiles(): HasMany
     {
         return $this->hasMany(\App\Models\VodFile::class);
+    }
+
+    public function vodSchedules(): HasMany
+    {
+        return $this->hasMany(\App\Models\VodSchedule::class);
     }
 
     public function managers(): BelongsToMany

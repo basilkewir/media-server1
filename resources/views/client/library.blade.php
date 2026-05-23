@@ -1,10 +1,13 @@
 @extends('layouts.client')
-
 @section('title', 'Library')
 
 @section('content')
-<div style="max-width: 900px;">
-    <h2 style="font-size: 1.875rem; margin-bottom: 1.5rem;">Library</h2>
-    <p style="color: var(--text-muted);">Browse on-demand content and recordings.</p>
+<div class="card">
+    <div class="card-title">Video Library</div>
+    <p style="color:var(--text-tertiary);">Browse on-demand content from your channels.</p>
+    <div class="empty-state">
+        <div class="empty-state-title">Coming Soon</div>
+        <div class="empty-state-text">On-demand library features are under development.</div>
+    </div>
 </div>
 @endsection

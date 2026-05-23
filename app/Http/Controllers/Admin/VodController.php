@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Channel;
 use App\Models\VodFile;
+use App\Services\StorageQuotaService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -15,11 +16,12 @@ use Illuminate\View\View;
 
 class VodController extends Controller
 {
-    /** 2 GB per channel in bytes */
-    private const QUOTA_BYTES = 2 * 1024 * 1024 * 1024;
-
-    /** Max single file upload: 2 GB */
+    /** Max single file upload in MB (cap) */
     private const MAX_UPLOAD_MB = 2048;
+
+    public function __construct(
+        protected StorageQuotaService $quotaService,
+    ) {}
 
     public function index(Channel $channel): View
     {
@@ -27,8 +29,9 @@ class VodController extends Controller
 
         $files     = $channel->vodFiles()->orderBy('sort_order')->orderBy('created_at')->get();
         $usedBytes = $channel->vodFiles()->where('source_type', 'upload')->sum('size_bytes');
+        $quotaInfo = $this->quotaService->getQuotaInfo(auth()->user());
 
-        return view('admin.vod.index', compact('channel', 'files', 'usedBytes'));
+        return view('admin.vod.index', compact('channel', 'files', 'usedBytes', 'quotaInfo'));
     }
 
     public function store(Request $request, Channel $channel): RedirectResponse
@@ -73,28 +76,26 @@ class VodController extends Controller
      */
     public function handleUpload(Request $request, Channel $channel): RedirectResponse
     {
-        $usedBytes    = $channel->vodFiles()->where('source_type', 'upload')->sum('size_bytes');
-        $remainBytes  = max(0, self::QUOTA_BYTES - $usedBytes);
-        $remainMb     = (int) floor($remainBytes / 1048576);
+        $user          = auth()->user();
+        $quotaInfo     = $this->quotaService->getQuotaInfo($user);
+        $remainBytes   = $quotaInfo['remaining_bytes'];
 
         if ($remainBytes <= 0) {
-            return back()->withErrors(['file' => 'Channel storage quota of 2 GB is full. Delete some files first.']);
+            return back()->withErrors(['file' => 'Storage quota is full (' . $quotaInfo['quota_formatted'] . '). Upgrade your plan or delete files.']);
         }
 
-        // Max allowed for this upload = remaining space (capped at 2048 MB for validation)
-        $maxMb = min(self::MAX_UPLOAD_MB, max(1, $remainMb));
+        $maxMb = min(self::MAX_UPLOAD_MB, max(1, (int) floor($remainBytes / 1048576)));
 
         $request->validate([
-            'file'  => 'required|file|mimes:mp4,mkv,mov,avi,ts,m2ts,flv,webm|max:' . ($maxMb * 1000),
+            'file'  => 'required|file|mimes:mp4,mkv,mov,avi,ts,m2ts,flv,webm|max:' . ($maxMb * 1024),
             'title' => 'nullable|string|max:255',
         ]);
 
         $uploaded = $request->file('file');
         $fileSize = $uploaded->getSize();
 
-        // Double-check actual file size against remaining quota
-        if (($usedBytes + $fileSize) > self::QUOTA_BYTES) {
-            return back()->withErrors(['file' => 'File exceeds remaining quota (' . $this->formatBytes($remainBytes) . ' left).']);
+        if (!$this->quotaService->canUpload($user, $fileSize)) {
+            return back()->withErrors(['file' => 'File exceeds remaining quota (' . $quotaInfo['remaining_formatted'] . ').']);
         }
 
         $filename = Str::uuid() . '.' . $uploaded->getClientOriginalExtension();
@@ -112,6 +113,7 @@ class VodController extends Controller
             'sort_order'       => $channel->vodFiles()->max('sort_order') + 1,
         ]);
 
+        $this->quotaService->recalculateUserStorage($user);
         $this->generatePlaylist($channel);
 
         return back()->with('success', 'Video uploaded successfully.');
@@ -158,6 +160,7 @@ class VodController extends Controller
         }
 
         $vodFile->delete();
+        $this->quotaService->recalculateUserStorage(auth()->user());
         $this->generatePlaylist($channel);
 
         return back()->with('success', 'Video removed.');

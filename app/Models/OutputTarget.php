@@ -39,6 +39,7 @@ class OutputTarget extends Model
     const TRIGGER_LIVE_ONLY     = 'live_only';
     const TRIGGER_FALLBACK_ONLY = 'fallback_only';
     const TRIGGER_MANUAL        = 'manual';
+    const TRIGGER_FALLBACK_AUDIO = 'fallback_audio';
 
     // Status constants
     const STATUS_IDLE         = 'idle';

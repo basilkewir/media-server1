@@ -77,6 +77,12 @@ Route::middleware(['auth.api', 'throttle.api'])->group(function () {
     Route::post('icecast/{channel}/enable',           [IcecastController::class, 'enable']);
     Route::post('icecast/{channel}/disable',          [IcecastController::class, 'disable']);
 
+    // ── Audio Relay ────────────────────────────────────────────────────────────
+    Route::post('audio-relay/{channel}/start',        [IcecastController::class, 'startAudioRelay']);
+    Route::post('audio-relay/{channel}/stop',         [IcecastController::class, 'stopAudioRelay']);
+    Route::get('audio-relay/{channel}/status',        [IcecastController::class, 'audioRelayStatus']);
+    Route::post('audio-relay/{channel}/forward',      [IcecastController::class, 'forwardToServer']);
+
     // ── Relay servers ─────────────────────────────────────────────────────────
     Route::get('relay/servers',                       [RelayBroadcastController::class, 'getServers']);
     Route::post('relay/servers',                      [RelayBroadcastController::class, 'addServer']);

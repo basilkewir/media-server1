@@ -1,54 +1,51 @@
 @extends('layouts.admin')
-
-@section('title', $channel->name . ' Events')
+@section('title', 'Events — ' . $channel->name)
+@section('breadcrumb')
+    <a href="{{ route('admin.dashboard') }}">Dashboard</a> <span class="sep">/</span>
+    <a href="{{ route('admin.channels.index') }}">Channels</a> <span class="sep">/</span>
+    <a href="{{ route('admin.channels.show', $channel) }}">{{ $channel->name }}</a> <span class="sep">/</span> Events
+@endsection
 
 @section('content')
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-    <div>
-        <h1 style="margin: 0;">Event Log</h1>
-        <p style="margin: 0.25rem 0 0; color: var(--text-muted);">{{ $channel->name }}</p>
+<div class="card animate-in">
+    <div class="card-header">
+        <div>
+            <div class="card-title">Event Log</div>
+            <div class="card-subtitle">{{ $channel->name }} — lifecycle events</div>
+        </div>
     </div>
-    <a href="{{ route('admin.channels.show', $channel) }}" class="btn" style="background: #f1f5f9; color: var(--text);">Back to Channel</a>
-</div>
 
-<div class="card">
-    @if($events->count())
-    <table>
-        <thead>
-            <tr>
-                <th>Time</th>
-                <th>Event</th>
-                <th>Message</th>
-                <th>Severity</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach($events as $event)
-            <tr>
-                <td style="white-space: nowrap;">{{ $event->created_at->format('Y-m-d H:i:s') }}</td>
-                <td><span class="badge" style="background: #f1f5f9; color: var(--text);">{{ $event->event_type }}</span></td>
-                <td>{{ $event->message }}</td>
-                <td>
-                    @if($event->severity === 'info')
-                        <span style="color: var(--success); font-weight: 600;">Info</span>
-                    @elseif($event->severity === 'warning')
-                        <span style="color: var(--warning); font-weight: 600;">Warning</span>
-                    @elseif($event->severity === 'error')
-                        <span style="color: var(--danger); font-weight: 600;">Error</span>
-                    @else
-                        <span style="color: var(--text-muted);">{{ ucfirst($event->severity) }}</span>
-                    @endif
-                </td>
-            </tr>
-            @endforeach
-        </tbody>
-    </table>
-
-    <div style="margin-top: 1.5rem;">
-        {{ $events->links() }}
-    </div>
+    @if($events->isEmpty())
+        <div class="empty-state">
+            <div class="empty-state-icon"><svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="empty-state-title">No events recorded</div>
+            <div class="empty-state-text">Stream lifecycle events will appear here when streaming begins.</div>
+        </div>
     @else
-    <p style="color: var(--text-muted);">No events found for this channel.</p>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Time</th><th>Type</th><th>Message</th><th>Severity</th></tr>
+            </thead>
+            <tbody>
+                @foreach($events as $event)
+                <tr>
+                    <td style="white-space:nowrap;font-size:12px;">{{ $event->created_at->format('Y-m-d H:i:s') }}</td>
+                    <td><span class="badge badge-brand">{{ $event->event_type }}</span></td>
+                    <td>{{ $event->message }}</td>
+                    <td>
+                        <span class="badge {{ match($event->severity) {
+                            'info'     => 'badge-info',
+                            'warning'  => 'badge-warning',
+                            'error', 'critical' => 'badge-danger',
+                            default    => 'badge-neutral'
+                        } }}">{{ ucfirst($event->severity) }}</span>
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
     @endif
 </div>
 @endsection

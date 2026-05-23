@@ -4,8 +4,11 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\StreamPlayerController;
 use App\Http\Controllers\VodManagerController;
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Admin\AccessCodeController;
 use App\Http\Controllers\Admin\ChannelController;
+use App\Http\Controllers\Admin\ChannelGraphicsController;
+use App\Http\Controllers\Admin\PlanController;
 use App\Http\Controllers\Admin\StreamAdminController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\AdminDashboardController;
@@ -15,6 +18,7 @@ use App\Http\Controllers\Admin\AdminIcecastController;
 use App\Http\Controllers\Admin\AdminApiTokenController;
 use App\Http\Controllers\Admin\AdminSettingsController;
 use App\Http\Controllers\Admin\SrtStreamController;
+use App\Http\Controllers\Admin\VodScheduleController;
 use App\Http\Controllers\Client\DashboardController;
 use App\Http\Controllers\Client\StreamsController;
 use App\Http\Controllers\Client\LibraryController;
@@ -23,9 +27,20 @@ use App\Http\Controllers\Client\PremiumController;
 Route::get('/', fn() => redirect()->route('login'));
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
-Route::get('/login',  [LoginController::class, 'showLoginForm'])->name('login')->middleware('guest');
-Route::post('/login', [LoginController::class, 'login'])->middleware('guest');
-Route::post('/logout',[LoginController::class, 'logout'])->name('logout')->middleware('auth');
+Route::get('/login',    [LoginController::class, 'showLoginForm'])->name('login')->middleware('guest');
+Route::post('/login',   [LoginController::class, 'login'])->middleware('guest');
+Route::post('/logout',  [LoginController::class, 'logout'])->name('logout')->middleware('auth');
+
+// ── Registration & Public ─────────────────────────────────────────────────────
+Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register')->middleware('guest');
+Route::post('/register',[RegisterController::class, 'register'])->middleware('guest');
+Route::get('/pricing',  [RegisterController::class, 'showPricing'])->name('pricing');
+
+// ── Authenticated user profile ────────────────────────────────────────────────
+Route::middleware('auth')->group(function () {
+    Route::get('/profile',          [RegisterController::class, 'profile'])->name('profile');
+    Route::put('/profile',          [RegisterController::class, 'updateProfile'])->name('profile.update');
+});
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
@@ -56,6 +71,19 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::delete('channels/{channel}/vod/{vodFile}',       [\App\Http\Controllers\Admin\VodController::class, 'destroy'])->name('vod.destroy');
     Route::post('channels/{channel}/vod/reorder',           [\App\Http\Controllers\Admin\VodController::class, 'reorder'])->name('vod.reorder');
 
+    // VOD Scheduling
+    Route::get('channels/{channel}/vod-schedules',                     [VodScheduleController::class, 'index'])->name('vod-schedules.index');
+    Route::post('channels/{channel}/vod-schedules',                    [VodScheduleController::class, 'store'])->name('vod-schedules.store');
+    Route::put('channels/{channel}/vod-schedules/{vodSchedule}',       [VodScheduleController::class, 'update'])->name('vod-schedules.update');
+    Route::delete('channels/{channel}/vod-schedules/{vodSchedule}',    [VodScheduleController::class, 'destroy'])->name('vod-schedules.destroy');
+    Route::post('channels/{channel}/vod-schedules/{vodSchedule}/toggle', [VodScheduleController::class, 'toggle'])->name('vod-schedules.toggle');
+
+    // Channel Graphics (Logo, Watermark, Ticker)
+    Route::get('channels/{channel}/graphics',                          [ChannelGraphicsController::class, 'edit'])->name('channels.graphics');
+    Route::put('channels/{channel}/graphics/logo',                     [ChannelGraphicsController::class, 'updateLogo'])->name('channels.graphics.logo');
+    Route::put('channels/{channel}/graphics/watermark',                [ChannelGraphicsController::class, 'updateWatermark'])->name('channels.graphics.watermark');
+    Route::put('channels/{channel}/graphics/ticker',                   [ChannelGraphicsController::class, 'updateTicker'])->name('channels.graphics.ticker');
+
     // Output Targets
     Route::get('outputs',                                   [AdminOutputController::class, 'index'])->name('outputs.index');
     Route::get('outputs/create',                            [AdminOutputController::class, 'create'])->name('outputs.create');
@@ -80,6 +108,10 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::get('icecast',                                   [AdminIcecastController::class, 'index'])->name('icecast.index');
     Route::post('icecast/{channel}/enable',                 [AdminIcecastController::class, 'enable'])->name('icecast.enable');
     Route::post('icecast/{channel}/disable',                [AdminIcecastController::class, 'disable'])->name('icecast.disable');
+    Route::post('icecast/{channel}/audio-relay/start',      [AdminIcecastController::class, 'startAudioRelay'])->name('icecast.audio-relay.start');
+    Route::post('icecast/{channel}/audio-relay/stop',       [AdminIcecastController::class, 'stopAudioRelay'])->name('icecast.audio-relay.stop');
+    Route::post('icecast/{channel}/forward',                [AdminIcecastController::class, 'forwardToServer'])->name('icecast.forward');
+    Route::post('icecast/relay/start',                      [AdminIcecastController::class, 'startRelay'])->name('icecast.relay.start');
 
     // API Tokens
     Route::get('api-tokens',                                [AdminApiTokenController::class, 'index'])->name('api-tokens.index');
@@ -111,6 +143,16 @@ Route::prefix('admin')->name('admin.')->middleware('auth')->group(function () {
     Route::post('access-codes',                             [AccessCodeController::class, 'store'])->name('access-codes.store');
     Route::get('access-codes',                              [AccessCodeController::class, 'index'])->name('access-codes.index');
     Route::delete('access-codes/{accessCode}',              [AccessCodeController::class, 'destroy'])->name('access-codes.destroy');
+
+    // Subscription Plans (admin only)
+    Route::middleware('admin')->group(function () {
+        Route::get('plans',                                 [PlanController::class, 'index'])->name('plans.index');
+        Route::get('plans/create',                          [PlanController::class, 'create'])->name('plans.create');
+        Route::post('plans',                                [PlanController::class, 'store'])->name('plans.store');
+        Route::get('plans/{plan}/edit',                     [PlanController::class, 'edit'])->name('plans.edit');
+        Route::put('plans/{plan}',                          [PlanController::class, 'update'])->name('plans.update');
+        Route::delete('plans/{plan}',                       [PlanController::class, 'destroy'])->name('plans.destroy');
+    });
 
     // Users
     Route::middleware('admin')->group(function () {

@@ -11,4 +11,19 @@ class Kernel extends ConsoleKernel
     {
         $this->load(__DIR__.'/Commands');
     }
+
+    protected function schedule(Schedule $schedule): void
+    {
+        // Process VOD schedules every minute for active channels
+        $schedule->command('vod:process-schedules')
+            ->everyMinute()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/vod-scheduler.log'));
+
+        // Monitor audio relay processes every minute
+        $schedule->command('audio-relay:monitor')
+            ->everyMinute()
+            ->withoutOverlapping()
+            ->appendOutputTo(storage_path('logs/audio-relay.log'));
+    }
 }

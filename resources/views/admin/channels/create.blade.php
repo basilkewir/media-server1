@@ -1,94 +1,86 @@
 @extends('layouts.admin')
 @section('title', 'New Channel')
-@section('breadcrumb') <a href="{{ route('admin.channels.index') }}">Channels</a> / New @endsection
+@section('breadcrumb')
+    <a href="{{ route('admin.dashboard') }}">Dashboard</a> <span class="sep">/</span>
+    <a href="{{ route('admin.channels.index') }}">Channels</a> <span class="sep">/</span> New
+@endsection
 
 @section('content')
-<div class="card">
+<div class="card animate-in">
     <div class="card-header">
         <div>
             <div class="card-title">Create Channel</div>
-            <div class="card-subtitle">Configure a new streaming channel with ingest, output, and VOD fallback settings.</div>
+            <div class="card-subtitle">Configure a new streaming channel</div>
         </div>
     </div>
 
     <form method="POST" action="{{ route('admin.channels.store') }}">
         @csrf
-
-        <div class="form-section">Basic Info</div>
-        <div class="form-grid" style="margin-bottom:1rem;">
+        <div class="form-section">Basic Information</div>
+        <div class="form-grid">
             <div class="form-group">
-                <label>Channel Name <span style="color:var(--danger)">*</span></label>
-                <input type="text" name="name" value="{{ old('name') }}" required placeholder="Sports Channel">
-                @error('name')<span class="hint" style="color:var(--danger)">{{ $message }}</span>@enderror
+                <label class="label-required">Channel Name</label>
+                <input name="name" id="channel-name" value="{{ old('name') }}" placeholder="My Channel" required>
             </div>
             <div class="form-group">
-                <label>Slug <span style="color:var(--danger)">*</span></label>
-                <input type="text" name="slug" value="{{ old('slug') }}" required placeholder="sports">
-                <span class="hint">Used in stream URLs: /streams/<strong>slug</strong>/playlist.m3u8</span>
-                @error('slug')<span class="hint" style="color:var(--danger)">{{ $message }}</span>@enderror
+                <label class="label-required">Slug</label>
+                <input name="slug" id="channel-slug" value="{{ old('slug') }}" placeholder="my-channel" required data-touched="false">
+                <span class="hint">Used in stream URLs: /live/<code>slug</code></span>
             </div>
-            <div class="form-group form-full">
-                <label>Description</label>
-                <input type="text" name="description" value="{{ old('description') }}" placeholder="Optional description">
-            </div>
+        </div>
+        <div class="form-group">
+            <label>Description</label>
+            <textarea name="description" placeholder="What this channel is about...">{{ old('description') }}</textarea>
         </div>
 
-        <div class="form-section">Quality &amp; ABR</div>
-        <div class="alert alert-info" style="margin-bottom:1rem;">
-            Set both Resolution and Bitrate to enable <strong>multi-bitrate ABR</strong> (adaptive streaming ladder with HLS + DASH output).
-            Leave blank to use stream copy (no transcoding).
-        </div>
-        <div class="form-grid" style="margin-bottom:1rem;">
+        <div class="form-section">Quality & Encoding</div>
+        <div class="form-grid">
             <div class="form-group">
                 <label>Resolution</label>
                 <select name="resolution">
-                    <option value="">— Stream Copy (no transcode) —</option>
-                    <option value="3840x2160" {{ old('resolution') === '3840x2160' ? 'selected' : '' }}>4K — 3840×2160</option>
-                    <option value="1920x1080" {{ old('resolution') === '1920x1080' ? 'selected' : '' }}>Full HD — 1920×1080</option>
-                    <option value="1280x720"  {{ old('resolution') === '1280x720'  ? 'selected' : '' }}>HD — 1280×720</option>
-                    <option value="854x480"   {{ old('resolution') === '854x480'   ? 'selected' : '' }}>SD — 854×480</option>
-                    <option value="640x360"   {{ old('resolution') === '640x360'   ? 'selected' : '' }}>Low — 640×360</option>
+                    <option value="">Stream Copy (no transcode)</option>
+                    <option value="3840x2160">4K (3840x2160)</option>
+                    <option value="1920x1080">1080p (1920x1080)</option>
+                    <option value="1280x720">720p (1280x720)</option>
+                    <option value="854x480">480p (854x480)</option>
+                    <option value="640x360">360p (640x360)</option>
                 </select>
-                @error('resolution')<span class="hint" style="color:var(--danger)">{{ $message }}</span>@enderror
+                <span class="hint">Selecting a resolution enables adaptive bitrate ladder with lower renditions</span>
             </div>
             <div class="form-group">
                 <label>Bitrate (kbps)</label>
-                <input type="number" name="bitrate_kbps" value="{{ old('bitrate_kbps') }}" min="32" max="50000" placeholder="e.g. 4000 for 1080p">
-                <span class="hint">Top-rung bitrate. Lower rungs are auto-calculated.</span>
-                @error('bitrate_kbps')<span class="hint" style="color:var(--danger)">{{ $message }}</span>@enderror
+                <input type="number" name="bitrate_kbps" value="{{ old('bitrate_kbps', 3000) }}" placeholder="3000" min="100" max="50000">
+                <span class="hint">Top-rung bitrate for ABR ladder</span>
             </div>
         </div>
 
         <div class="form-section">VOD Fallback</div>
-        <div class="form-group" style="margin-bottom:1rem;">
-            <label>VOD Playlist URL <span class="hint">(auto-switches when live stream goes offline)</span></label>
-            <input type="text" name="vod_playlist_url" value="{{ old('vod_playlist_url') }}"
-                   placeholder="Leave blank — upload videos via VOD Library after creating the channel">
-            <span class="hint">You can also upload videos via the VOD Library page after creating the channel.</span>
-            @error('vod_playlist_url')<span class="hint" style="color:var(--danger)">{{ $message }}</span>@enderror
+        <div class="form-group">
+            <label>VOD Playlist URL (optional)</label>
+            <input name="vod_playlist_url" value="{{ old('vod_playlist_url') }}" placeholder="https://... or leave blank">
+            <span class="hint">Auto-generated after uploading videos in VOD Library. Manual URL also accepted.</span>
         </div>
 
         <div class="form-section">Output Push Target</div>
-        <div class="form-group" style="margin-bottom:1rem;">
-            <label>RTMP Push URL <span class="hint">(optional — push stream to another server)</span></label>
-            <input type="text" name="rtmp_push_url" value="{{ old('rtmp_push_url') }}"
-                   placeholder="rtmp://a.rtmp.youtube.com/live2/xxxx-xxxx  or  srt://...">
-            @error('rtmp_push_url')<span class="hint" style="color:var(--danger)">{{ $message }}</span>@enderror
+        <div class="form-group">
+            <label>RTMP Push URL (optional)</label>
+            <input name="rtmp_push_url" value="{{ old('rtmp_push_url') }}" placeholder="rtmp://...">
+            <span class="hint">Optional: push stream to external RTMP server</span>
         </div>
 
         <div class="form-section">Options</div>
-        <div class="form-grid-3" style="margin-bottom:1.5rem;">
-            <label class="toggle-label">
+        <div style="display:flex;gap:24px;flex-wrap:wrap;">
+            <label class="toggle-row">
                 <input type="checkbox" name="is_icecast_enabled" value="1" {{ old('is_icecast_enabled') ? 'checked' : '' }}>
-                Enable Icecast Audio
+                Icecast Audio Relay
             </label>
-            <label class="toggle-label">
+            <label class="toggle-row">
                 <input type="checkbox" name="is_relay_enabled" value="1" {{ old('is_relay_enabled') ? 'checked' : '' }}>
-                Enable Relay
+                External Relay
             </label>
         </div>
 
-        <div class="actions">
+        <div style="margin-top:24px;display:flex;gap:10px;">
             <button type="submit" class="btn btn-primary">Create Channel</button>
             <a href="{{ route('admin.channels.index') }}" class="btn btn-ghost">Cancel</a>
         </div>
@@ -98,15 +90,20 @@
 
 @push('scripts')
 <script>
-// Auto-generate slug from name
-document.querySelector('[name=name]').addEventListener('input', function() {
-    const slugField = document.querySelector('[name=slug]');
-    if (!slugField.dataset.touched) {
-        slugField.value = this.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+(function() {
+    const nameEl = document.getElementById('channel-name');
+    const slugEl = document.getElementById('channel-slug');
+    function slugify(text) {
+        return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     }
-});
-document.querySelector('[name=slug]').addEventListener('input', function() {
-    this.dataset.touched = '1';
-});
+    nameEl.addEventListener('input', function() {
+        if (slugEl.dataset.touched === 'false') {
+            slugEl.value = slugify(this.value);
+        }
+    });
+    slugEl.addEventListener('input', function() {
+        slugEl.dataset.touched = 'true';
+    });
+})();
 </script>
 @endpush

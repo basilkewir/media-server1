@@ -1,10 +1,13 @@
 @extends('layouts.client')
-
-@section('title', 'Premium Content')
+@section('title', 'Premium')
 
 @section('content')
-<div style="max-width: 900px;">
-    <h2 style="font-size: 1.875rem; margin-bottom: 1.5rem;">Premium Content</h2>
-    <p style="color: var(--text-muted);">Exclusive premium videos and advanced features.</p>
+<div class="card">
+    <div class="card-title">Premium Content</div>
+    <p style="color:var(--text-tertiary);">Exclusive premium videos for subscribers.</p>
+    <div class="empty-state">
+        <div class="empty-state-title">Coming Soon</div>
+        <div class="empty-state-text">Premium features are under development.</div>
+    </div>
 </div>
 @endsection
