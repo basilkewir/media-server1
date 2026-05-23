@@ -16,12 +16,13 @@ class StoreAccessCodeRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'type' => 'required|in:library_only,full_access,premium',
+            'type'          => 'required|in:library_only,full_access,premium,vod_manager',
+            'channel_id'    => 'nullable|exists:channels,id|required_if:type,vod_manager',
             'duration_days' => 'required|integer|in:30,90,180,365,730',
-            'quantity' => 'required|integer|in:5,10,25,50,100',
-            'max_uses' => 'nullable|integer|min:1|max:1000',
-            'code_length' => 'nullable|integer|min:8|max:32',
-            'expires_at' => 'nullable|date|after:today',
+            'quantity'      => 'required|integer|in:1,5,10,25,50,100',
+            'max_uses'      => 'nullable|integer|min:1|max:1000',
+            'code_length'   => 'nullable|integer|min:8|max:32',
+            'expires_at'    => 'nullable|date|after:today',
         ];
     }
 

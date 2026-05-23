@@ -15,6 +15,7 @@ class AccessCode extends Model
     protected $table = 'access_codes';
 
     protected $fillable = [
+        'channel_id',
         'code',
         'type',
         'duration_days',
@@ -32,8 +33,14 @@ class AccessCode extends Model
     ];
 
     const TYPE_LIBRARY_ONLY = 'library_only';
-    const TYPE_FULL_ACCESS = 'full_access';
-    const TYPE_PREMIUM = 'premium';
+    const TYPE_FULL_ACCESS  = 'full_access';
+    const TYPE_PREMIUM      = 'premium';
+    const TYPE_VOD_MANAGER  = 'vod_manager';
+
+    public function channel(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Channel::class);
+    }
 
     public function redemptions(): HasMany
     {
@@ -84,7 +91,8 @@ class AccessCode extends Model
         int $quantity,
         ?\DateTimeInterface $expiresAt = null,
         int $maxUses = 1,
-        int $codeLength = 12
+        int $codeLength = 12,
+        ?int $channelId = null,
     ): array {
         $codes = [];
 
@@ -92,13 +100,14 @@ class AccessCode extends Model
             $plainCode = self::generateRandomCode($codeLength);
 
             $codes[] = static::create([
-                'code' => $plainCode,
-                'type' => $type,
+                'channel_id'    => $channelId,
+                'code'          => $plainCode,
+                'type'          => $type,
                 'duration_days' => $durationDays,
-                'expires_at' => $expiresAt,
-                'max_uses' => $maxUses,
-                'uses_count' => 0,
-                'is_active' => true,
+                'expires_at'    => $expiresAt,
+                'max_uses'      => $maxUses,
+                'uses_count'    => 0,
+                'is_active'     => true,
             ]);
         }
 
@@ -145,9 +154,10 @@ class AccessCode extends Model
     {
         return match ($this->type) {
             self::TYPE_LIBRARY_ONLY => 'Library Only',
-            self::TYPE_FULL_ACCESS => 'Full Access',
-            self::TYPE_PREMIUM => 'Premium',
-            default => 'Unknown',
+            self::TYPE_FULL_ACCESS  => 'Full Access',
+            self::TYPE_PREMIUM      => 'Premium',
+            self::TYPE_VOD_MANAGER  => 'VOD Manager',
+            default                 => 'Unknown',
         };
     }
 }

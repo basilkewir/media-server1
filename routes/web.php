@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\StreamPlayerController;
+use App\Http\Controllers\VodManagerController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Admin\AccessCodeController;
 use App\Http\Controllers\Admin\ChannelController;
@@ -138,3 +139,15 @@ Route::get('/streams/{slug}/playlist.m3u8',  [StreamPlayerController::class, 'hl
 Route::get('/streams/{slug}/master.m3u8',    [StreamPlayerController::class, 'hlsMaster'])->name('stream.hls.master');
 Route::get('/streams/{slug}/{segment}.ts',   [StreamPlayerController::class, 'hlsSegment'])->name('stream.segment')->where('segment', 'seg\d+');
 Route::get('/streams/{slug}/manifest.mpd',   [StreamPlayerController::class, 'dashManifest'])->name('stream.dash');
+
+// ── VOD Manager (channel-scoped, access code protected) ───────────────────────────
+Route::prefix('vod-manager/{channel}')->name('vod-manager.')->group(function () {
+    Route::get('login',                          [VodManagerController::class, 'showLogin'])->name('login');
+    Route::post('login',                         [VodManagerController::class, 'login'])->name('login.post');
+    Route::post('logout',                        [VodManagerController::class, 'logout'])->name('logout');
+    Route::get('/',                              [VodManagerController::class, 'index'])->name('index');
+    Route::post('upload',                        [VodManagerController::class, 'store'])->name('store');
+    Route::post('youtube',                       [VodManagerController::class, 'storeYoutube'])->name('store-youtube');
+    Route::delete('{vodFile}',                   [VodManagerController::class, 'destroy'])->name('destroy');
+    Route::post('reorder',                       [VodManagerController::class, 'reorder'])->name('reorder');
+});

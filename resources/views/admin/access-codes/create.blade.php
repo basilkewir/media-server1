@@ -12,12 +12,27 @@
 
         <div class="form-group">
             <label>Subscription Type <span class="required">*</span></label>
-            <select name="type" required>
-                <option value="library_only" {{ old('type') == 'library_only' ? 'selected' : '' }}>Library Only - Access to library resources only</option>
-                <option value="full_access" {{ old('type', 'full_access') == 'full_access' ? 'selected' : '' }}>Full Access - All courses, library, and features</option>
-                <option value="premium" {{ old('type') == 'premium' ? 'selected' : '' }}>Premium - Premium content and advanced features</option>
+            <select name="type" id="type-select" required onchange="toggleChannel(this.value)">
+                <option value="library_only" {{ old('type') == 'library_only' ? 'selected' : '' }}>Library Only</option>
+                <option value="full_access" {{ old('type', 'full_access') == 'full_access' ? 'selected' : '' }}>Full Access</option>
+                <option value="premium" {{ old('type') == 'premium' ? 'selected' : '' }}>Premium</option>
+                <option value="vod_manager" {{ old('type') == 'vod_manager' ? 'selected' : '' }}>VOD Manager (channel-scoped)</option>
             </select>
             @error('type')<small style="color: var(--danger);">{{ $message }}</small>@enderror
+        </div>
+
+        <div class="form-group" id="channel-group" style="display:none;">
+            <label>Channel <span class="required">*</span></label>
+            <select name="channel_id">
+                <option value="">— Select a channel —</option>
+                @foreach($channels as $ch)
+                    <option value="{{ $ch->id }}" {{ old('channel_id') == $ch->id ? 'selected' : '' }}>
+                        {{ $ch->name }} ({{ $ch->slug }})
+                    </option>
+                @endforeach
+            </select>
+            <small style="color:var(--muted);">The code will only work for this channel's VOD manager.</small>
+            @error('channel_id')<small style="color: var(--danger);">{{ $message }}</small>@enderror
         </div>
 
         <div class="form-group">
@@ -35,6 +50,7 @@
         <div class="form-group">
             <label>Number of Codes to Generate <span class="required">*</span></label>
             <select name="quantity" required>
+                <option value="1" {{ old('quantity') == 1 ? 'selected' : '' }}>1</option>
                 <option value="5" {{ old('quantity') == 5 ? 'selected' : '' }}>5</option>
                 <option value="10" {{ old('quantity', 10) == 10 ? 'selected' : '' }}>10</option>
                 <option value="25" {{ old('quantity') == 25 ? 'selected' : '' }}>25</option>
@@ -72,7 +88,7 @@
         <h3>Summary</h3>
         <dl>
             <dt>Type:</dt>
-            <dd>{{ session('summary.type_label') }}</dd>
+            <dd>{{ session('summary.type_label') }}@if(session('summary.channel')) &mdash; {{ session('summary.channel') }}@endif</dd>
             <dt>Duration:</dt>
             <dd>{{ session('summary.duration_days') }} days</dd>
             <dt>Codes Generated:</dt>
@@ -95,3 +111,14 @@
 </div>
 @endif
 @endsection
+
+@push('scripts')
+<script>
+function toggleChannel(type) {
+    const group = document.getElementById('channel-group');
+    group.style.display = type === 'vod_manager' ? '' : 'none';
+    group.querySelector('select').required = type === 'vod_manager';
+}
+toggleChannel(document.getElementById('type-select').value);
+</script>
+@endpush

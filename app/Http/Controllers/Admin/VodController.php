@@ -35,35 +35,81 @@ class VodController extends Controller
     {
         abort_if(!auth()->user()->canManageChannel($channel), 403);
 
+        return $this->handleUpload($request, $channel);
+    }
+
+    public function storeYoutube(Request $request, Channel $channel): RedirectResponse
+    {
+        abort_if(!auth()->user()->canManageChannel($channel), 403);
+
+        return $this->handleYoutube($request, $channel);
+    }
+
+    public function destroy(Channel $channel, VodFile $vodFile): RedirectResponse
+    {
+        abort_if(!auth()->user()->canManageChannel($channel), 403);
+        abort_if($vodFile->channel_id !== $channel->id, 403);
+
+        return $this->handleDestroy($channel, $vodFile);
+    }
+
+    public function reorder(Request $request, Channel $channel): RedirectResponse
+    {
+        abort_if(!auth()->user()->canManageChannel($channel), 403);
+
+        $request->validate(['order' => 'required|array', 'order.*' => 'integer']);
+
+        foreach ($request->input('order') as $position => $id) {
+            $channel->vodFiles()->where('id', $id)->update(['sort_order' => $position]);
+        }
+
+        $this->generatePlaylist($channel);
+
+        return back()->with('success', 'Order saved.');
+    }
+
+    /**
+     * Shared upload handler — used by both admin and VOD manager.
+     */
+    public function handleUpload(Request $request, Channel $channel): RedirectResponse
+    {
+        $usedBytes    = $channel->vodFiles()->where('source_type', 'upload')->sum('size_bytes');
+        $remainBytes  = max(0, self::QUOTA_BYTES - $usedBytes);
+        $remainMb     = (int) floor($remainBytes / 1048576);
+
+        if ($remainBytes <= 0) {
+            return back()->withErrors(['file' => 'Channel storage quota of 2 GB is full. Delete some files first.']);
+        }
+
+        // Max allowed for this upload = remaining space (capped at 2048 MB for validation)
+        $maxMb = min(self::MAX_UPLOAD_MB, max(1, $remainMb));
+
         $request->validate([
-            'file'  => 'required|file|mimes:mp4,mkv,mov,avi,ts,m2ts,flv,webm|max:' . self::MAX_UPLOAD_MB . '000',
+            'file'  => 'required|file|mimes:mp4,mkv,mov,avi,ts,m2ts,flv,webm|max:' . ($maxMb * 1000),
             'title' => 'nullable|string|max:255',
         ]);
 
-        $uploaded  = $request->file('file');
-        $fileSize  = $uploaded->getSize();
-        $usedBytes = $channel->vodFiles()->where('source_type', 'upload')->sum('size_bytes');
+        $uploaded = $request->file('file');
+        $fileSize = $uploaded->getSize();
 
+        // Double-check actual file size against remaining quota
         if (($usedBytes + $fileSize) > self::QUOTA_BYTES) {
-            $remaining = $this->formatBytes(self::QUOTA_BYTES - $usedBytes);
-            return back()->withErrors(['file' => "Channel storage quota exceeded. Remaining: {$remaining}"]);
+            return back()->withErrors(['file' => 'File exceeds remaining quota (' . $this->formatBytes($remainBytes) . ' left).']);
         }
 
         $filename = Str::uuid() . '.' . $uploaded->getClientOriginalExtension();
-
         Storage::disk('vod')->putFileAs('', $uploaded, $filename);
-
         $duration = $this->probeDuration(Storage::disk('vod')->path($filename));
 
         $channel->vodFiles()->create([
-            'source_type'   => 'upload',
-            'title'         => $request->input('title') ?: pathinfo($uploaded->getClientOriginalName(), PATHINFO_FILENAME),
-            'filename'      => $filename,
-            'original_name' => $uploaded->getClientOriginalName(),
-            'mime_type'     => $uploaded->getMimeType(),
-            'size_bytes'    => $fileSize,
+            'source_type'      => 'upload',
+            'title'            => $request->input('title') ?: pathinfo($uploaded->getClientOriginalName(), PATHINFO_FILENAME),
+            'filename'         => $filename,
+            'original_name'    => $uploaded->getClientOriginalName(),
+            'mime_type'        => $uploaded->getMimeType(),
+            'size_bytes'       => $fileSize,
             'duration_seconds' => $duration,
-            'sort_order'    => $channel->vodFiles()->max('sort_order') + 1,
+            'sort_order'       => $channel->vodFiles()->max('sort_order') + 1,
         ]);
 
         $this->generatePlaylist($channel);
@@ -71,19 +117,18 @@ class VodController extends Controller
         return back()->with('success', 'Video uploaded successfully.');
     }
 
-    public function storeYoutube(Request $request, Channel $channel): RedirectResponse
+    /**
+     * Shared YouTube handler — used by both admin and VOD manager.
+     */
+    public function handleYoutube(Request $request, Channel $channel): RedirectResponse
     {
-        abort_if(!auth()->user()->canManageChannel($channel), 403);
-
         $request->validate([
             'youtube_url' => ['required', 'url', 'regex:/^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w\-]{11}/'],
             'title'       => 'nullable|string|max:255',
         ]);
 
         $url = $request->input('youtube_url');
-
-        // Normalise to short URL and extract video ID for title fallback
-        preg_match('/(?:v=|youtu\.be\/)([\w\-]{11})/', $url, $m);
+        preg_match('/(?:v=|youtu\.be\/)(\w[\w\-]{10})/', $url, $m);
         $videoId = $m[1] ?? Str::random(11);
         $title   = $request->input('title') ?: "YouTube: {$videoId}";
 
@@ -101,9 +146,11 @@ class VodController extends Controller
         return back()->with('success', 'YouTube video added to playlist.');
     }
 
-    public function destroy(Channel $channel, VodFile $vodFile): RedirectResponse
+    /**
+     * Shared destroy handler.
+     */
+    public function handleDestroy(Channel $channel, VodFile $vodFile): RedirectResponse
     {
-        abort_if(!auth()->user()->canManageChannel($channel), 403);
         abort_if($vodFile->channel_id !== $channel->id, 403);
 
         if (!$vodFile->isYoutube() && $vodFile->filename) {
@@ -114,21 +161,6 @@ class VodController extends Controller
         $this->generatePlaylist($channel);
 
         return back()->with('success', 'Video removed.');
-    }
-
-    public function reorder(Request $request, Channel $channel): RedirectResponse
-    {
-        abort_if(!auth()->user()->canManageChannel($channel), 403);
-
-        $request->validate(['order' => 'required|array', 'order.*' => 'integer']);
-
-        foreach ($request->input('order') as $position => $id) {
-            $channel->vodFiles()->where('id', $id)->update(['sort_order' => $position]);
-        }
-
-        $this->generatePlaylist($channel);
-
-        return back()->with('success', 'Order saved.');
     }
 
     /**
